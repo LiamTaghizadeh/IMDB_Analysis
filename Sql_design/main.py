@@ -1,1 +1,354 @@
+"""
+generate_sql.py
+Reads imdb.xlsx and generates a fully populated database.sql file
+with CREATE TABLE and INSERT statements for the IMDb Top 250 schema.
+Uses object‑oriented design for clarity and reusability.
+"""
 
+import pandas as pd
+import re
+from typing import Dict, List, Tuple, Optional
+
+# ------------------------------------------------------------------
+# Helper functions (clean, escape, format)
+# ------------------------------------------------------------------
+
+def clean_str(val) -> Optional[str]:
+    """Safely convert to string, strip whitespace. Return None if empty."""
+    if pd.isna(val):
+        return None
+    s = str(val).strip()
+    return s if s else None
+
+
+def escape_sql(s) -> str:
+    """Escape single quotes for SQL INSERT statements."""
+    if s is None:
+        return 'NULL'
+    return "'" + str(s).replace("'", "''") + "'"
+
+
+def format_value(val, dtype='str') -> str:
+    """Format Python values into SQL‑compatible strings."""
+    if pd.isna(val) or val is None or val == '':
+        return 'NULL'
+    if dtype == 'int':
+        return str(int(val))
+    elif dtype == 'float':
+        return str(float(val))
+    elif dtype == 'date':
+        if hasattr(val, 'strftime'):
+            return f"'{val.strftime('%Y-%m-%d')}'"
+        return f"'{str(val)}'"
+    else:  # string
+        return escape_sql(val)
+
+
+# ------------------------------------------------------------------
+# Main Importer Class
+# ------------------------------------------------------------------
+
+class IMDbDataImporter:
+    """
+    Reads IMDb Top 250 Excel file, normalizes data, and generates SQL.
+    """
+
+    def __init__(self, excel_path: str):
+        self.excel_path = excel_path
+        self.df = None
+
+        # Data containers
+        self.movies: List[Dict] = []          # list of dicts for movies table
+        self.genres_dict: Dict[str, int] = {} # genre name -> id
+        self.movie_genres: List[Tuple[int, str]] = []  # (movie_idx, genre_name)
+
+        # We'll ignore people, box_office etc. as the Excel doesn't have those columns.
+        # Tables will be created but left empty.
+
+    def load_excel(self) -> None:
+        """Load the Excel file, using the first sheet (Movies)."""
+        # Use openpyxl engine for .xlsx
+        self.df = pd.read_excel(self.excel_path, sheet_name=0, engine='openpyxl')
+        # Normalize column names: lowercase, strip, replace spaces with underscores
+        self.df.columns = [c.lower().strip().replace(' ', '_') for c in self.df.columns]
+        print(f"Loaded {len(self.df)} rows from sheet 'Movies'.")
+
+    def process_movies(self) -> None:
+        """Extract movie data and normalize genres."""
+        for idx, row in self.df.iterrows():
+            # ----- Movie fields -----
+            movie = {
+                'imdb_id': clean_str(row.get('imdb_id')),
+                'title': clean_str(row.get('title')),
+                'year': None,  # year column is empty in the given file
+                'rated': clean_str(row.get('content_rating')),
+                'runtime_minutes': self._safe_int(row.get('duration_min')),
+                'rating': self._safe_float(row.get('rating')),
+                'vote_count': self._safe_int(row.get('votes')),
+                'plot': clean_str(row.get('description')),
+                'poster_url': clean_str(row.get('image_url')),
+                'release_date': None,
+                'language': None,
+                'country': None,
+            }
+            self.movies.append(movie)
+
+            # ----- Genres (comma‑separated) -----
+            genre_str = row.get('genre')
+            if pd.notna(genre_str) and genre_str:
+                for g in self._split_genres(genre_str):
+                    if g not in self.genres_dict:
+                        self.genres_dict[g] = len(self.genres_dict) + 1
+                    self.movie_genres.append((idx, g))
+
+    def _safe_int(self, val) -> Optional[int]:
+        try:
+            if pd.isna(val):
+                return None
+            return int(val)
+        except (ValueError, TypeError):
+            return None
+
+    def _safe_float(self, val) -> Optional[float]:
+        try:
+            if pd.isna(val):
+                return None
+            return float(val)
+        except (ValueError, TypeError):
+            return None
+
+    def _split_genres(self, genre_str: str) -> List[str]:
+        """Split by comma and strip; return non‑empty list."""
+        if pd.isna(genre_str):
+            return []
+        parts = re.split(r',\s*', str(genre_str))
+        return [p.strip() for p in parts if p.strip()]
+
+    def generate_sql(self, output_path: str) -> None:
+        """Write all SQL statements to a file."""
+        sql_lines = []
+
+        # ======== HEADER ========
+        sql_lines.append("-- ============================================================")
+        sql_lines.append("-- IMDb Top 250 - Complete Database Dump")
+        sql_lines.append("-- Generated by generate_sql.py")
+        sql_lines.append("-- ============================================================")
+        sql_lines.append("")
+        sql_lines.append("-- DROP existing tables (order matters for foreign keys)")
+        sql_lines.append("DROP TABLE IF EXISTS movie_people CASCADE;")
+        sql_lines.append("DROP TABLE IF EXISTS movie_genres CASCADE;")
+        sql_lines.append("DROP TABLE IF EXISTS box_office CASCADE;")
+        sql_lines.append("DROP TABLE IF EXISTS user_ratings CASCADE;")
+        sql_lines.append("DROP TABLE IF EXISTS awards CASCADE;")
+        sql_lines.append("DROP TABLE IF EXISTS movies CASCADE;")
+        sql_lines.append("DROP TABLE IF EXISTS people CASCADE;")
+        sql_lines.append("DROP TABLE IF EXISTS roles CASCADE;")
+        sql_lines.append("DROP TABLE IF EXISTS genres CASCADE;")
+        sql_lines.append("")
+
+        # ======== CREATE TABLES ========
+        sql_lines.append("-- ============================================================")
+        sql_lines.append("-- TABLES CREATION")
+        sql_lines.append("-- ============================================================")
+
+        sql_lines.append("""
+CREATE TABLE movies (
+    id SERIAL PRIMARY KEY,
+    imdb_id VARCHAR(20) UNIQUE,
+    title VARCHAR(500) NOT NULL,
+    year INTEGER,
+    rated VARCHAR(20),
+    runtime_minutes INTEGER,
+    rating DECIMAL(3,1),
+    vote_count INTEGER,
+    plot TEXT,
+    poster_url TEXT,
+    release_date DATE,
+    language VARCHAR(100),
+    country VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP
+);
+""")
+
+        sql_lines.append("""
+CREATE TABLE genres (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+""")
+
+        sql_lines.append("""
+CREATE TABLE movie_genres (
+    movie_id INTEGER REFERENCES movies(id),
+    genre_id INTEGER REFERENCES genres(id),
+    PRIMARY KEY (movie_id, genre_id)
+);
+""")
+
+        sql_lines.append("""
+CREATE TABLE people (
+    id SERIAL PRIMARY KEY,
+    imdb_name_id VARCHAR(20) UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    birth_year INTEGER,
+    death_year INTEGER,
+    bio TEXT,
+    photo_url TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+""")
+
+        sql_lines.append("""
+CREATE TABLE roles (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) UNIQUE NOT NULL,
+    description VARCHAR(200)
+);
+""")
+
+        sql_lines.append("""
+CREATE TABLE movie_people (
+    movie_id INTEGER REFERENCES movies(id),
+    person_id INTEGER REFERENCES people(id),
+    role_id INTEGER REFERENCES roles(id),
+    character_name VARCHAR(200),
+    ordering INTEGER DEFAULT 0,
+    PRIMARY KEY (movie_id, person_id, role_id)
+);
+""")
+
+        sql_lines.append("""
+CREATE TABLE box_office (
+    id SERIAL PRIMARY KEY,
+    movie_id INTEGER REFERENCES movies(id),
+    release_version VARCHAR(50) DEFAULT 'Theatrical',
+    region VARCHAR(50) DEFAULT 'Worldwide',
+    us_canada_gross BIGINT,
+    opening_weekend BIGINT,
+    budget BIGINT,
+    worldwide_gross BIGINT,
+    currency VARCHAR(10) DEFAULT 'USD',
+    updated_at TIMESTAMP,
+    UNIQUE (movie_id, release_version, region)
+);
+""")
+
+        sql_lines.append("""
+CREATE TABLE awards (
+    id SERIAL PRIMARY KEY,
+    movie_id INTEGER REFERENCES movies(id),
+    award_name VARCHAR(255) NOT NULL,
+    category VARCHAR(200),
+    year INTEGER,
+    won BOOLEAN DEFAULT FALSE,
+    ceremony_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+""")
+
+        sql_lines.append("""
+CREATE TABLE user_ratings (
+    id SERIAL PRIMARY KEY,
+    movie_id INTEGER REFERENCES movies(id),
+    user_id VARCHAR(100) NOT NULL,
+    rating DECIMAL(3,1) NOT NULL,
+    review TEXT,
+    rating_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (movie_id, user_id)
+);
+""")
+        sql_lines.append("")
+
+        # ======== INSERT ROLES (static data) ========
+        sql_lines.append("-- Insert predefined roles")
+        sql_lines.append("INSERT INTO roles (name, description) VALUES")
+        sql_lines.append("('director', 'Film director'),")
+        sql_lines.append("('writer', 'Screenwriter / Story writer'),")
+        sql_lines.append("('star', 'Lead or supporting actor')")
+        sql_lines.append("ON CONFLICT (name) DO NOTHING;")
+        sql_lines.append("")
+
+        # ======== INSERT MOVIES ========
+        sql_lines.append("-- ============================================================")
+        sql_lines.append("-- INSERT DATA")
+        sql_lines.append("-- ============================================================")
+
+        sql_lines.append("-- MOVIES")
+        # We assign movie id = row index + 1 (1‑based)
+        for idx, m in enumerate(self.movies):
+            movie_id = idx + 1
+            cols = ['id', 'imdb_id', 'title', 'year', 'rated', 'runtime_minutes',
+                    'rating', 'vote_count', 'plot', 'poster_url', 'release_date',
+                    'language', 'country']
+            vals = [
+                str(movie_id),
+                format_value(m.get('imdb_id'), 'str'),
+                format_value(m.get('title'), 'str'),
+                format_value(m.get('year'), 'int'),
+                format_value(m.get('rated'), 'str'),
+                format_value(m.get('runtime_minutes'), 'int'),
+                format_value(m.get('rating'), 'float'),
+                format_value(m.get('vote_count'), 'int'),
+                format_value(m.get('plot'), 'str'),
+                format_value(m.get('poster_url'), 'str'),
+                'NULL',  # release_date
+                'NULL',  # language
+                'NULL',  # country
+            ]
+            sql_lines.append(
+                f"INSERT INTO movies ({', '.join(cols)}) VALUES ({', '.join(vals)});"
+            )
+        sql_lines.append("")
+
+        # ======== INSERT GENRES ========
+        sql_lines.append("-- GENRES")
+        for name, gid in self.genres_dict.items():
+            sql_lines.append(f"INSERT INTO genres (id, name) VALUES ({gid}, {escape_sql(name)});")
+        sql_lines.append("")
+
+        # ======== INSERT MOVIE_GENRES ========
+        sql_lines.append("-- MOVIE_GENRES (movie_id = row_index + 1)")
+        for movie_idx, genre_name in self.movie_genres:
+            movie_id = movie_idx + 1
+            genre_id = self.genres_dict[genre_name]
+            sql_lines.append(
+                f"INSERT INTO movie_genres (movie_id, genre_id) VALUES ({movie_id}, {genre_id});"
+            )
+        sql_lines.append("")
+
+        # ======== OTHER TABLES (no data) ========
+        sql_lines.append("-- PEOPLE (no data in source, skipping)")
+        sql_lines.append("-- MOVIE_PEOPLE (no data in source, skipping)")
+        sql_lines.append("-- BOX_OFFICE (no data in source, skipping)")
+        sql_lines.append("-- AWARDS (no data in source, skipping)")
+        sql_lines.append("-- USER_RATINGS (no data in source, skipping)")
+        sql_lines.append("")
+        sql_lines.append("-- ============================================================")
+        sql_lines.append("-- FINISHED")
+        sql_lines.append("-- ============================================================")
+
+        # Write to file
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(sql_lines))
+
+        print(f"✅ SQL script written to {output_path}")
+        print(f"   - Movies inserted: {len(self.movies)}")
+        print(f"   - Genres inserted: {len(self.genres_dict)}")
+        print(f"   - Movie-Genre relations inserted: {len(self.movie_genres)}")
+
+    def run(self, output_path: str = 'database.sql') -> None:
+        """Orchestrate the entire import process."""
+        self.load_excel()
+        self.process_movies()
+        self.generate_sql(output_path)
+
+
+# ------------------------------------------------------------------
+# Entry point
+# ------------------------------------------------------------------
+
+if __name__ == "__main__":
+    importer = IMDbDataImporter('imdb.xlsx')
+    importer.run('database.sql')
