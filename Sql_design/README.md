@@ -17,7 +17,7 @@ The goal is to uncover hidden patterns in cinema history—exploring how genres,
 
 To enable robust, scalable analysis, I designed a highly normalized database structure (3NF) featuring separate tables for `movies`, `genres`, `people` (directors/writers/actors), `box_office`, `awards`, and `user_ratings`. This design allows for deep-dive analytical queries (e.g., genre-rating correlations, director impact, budget-to-profit analysis) without data redundancy.
 
-![Database Schema](images/erd.png)
+![Database Schema](../erd.png)
 
 > *Export this visual directly from [dbdiagram.io](https://dbdiagram.io) using the provided DBML code in the `/database` directory.*
 
@@ -57,5 +57,3 @@ The dataset consists of scraped metadata for the current **IMDb Top 250** list, 
 | **Environment** | Jupyter Notebook, VSCode |
 
 ---
-
-## 📁 Project Structure
