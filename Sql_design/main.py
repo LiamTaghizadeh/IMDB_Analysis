@@ -1,10 +1,3 @@
-"""
-generate_sql.py
-Reads imdb.xlsx and generates a fully populated database.sql file
-with CREATE TABLE and INSERT statements for the IMDb Top 250 schema.
-Uses object‑oriented design for clarity and reusability.
-"""
-
 import pandas as pd
 import re
 from typing import Dict, List, Tuple, Optional
