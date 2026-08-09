@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>IMDb Top 250 · Professional Analytics Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0f;--bg2:#12121a;--bg3:#1a1a26;--bg4:#222233;
+  --border:#2a2a3d;--border2:#3a3a55;
+  --text:#e8e8f0;--text2:#a0a0b8;--text3:#6a6a80;
+  --accent:#f5c518;--accent2:#e6a800;--accent-dim:rgba(245,197,24,.15);
+  --blue:#3b82f6;--green:#22c55e;--purple:#a855f7;--red:#ef4444;--cyan:#06b6d4;
+  --radius:14px;--radius-sm:8px;
+  --shadow:0 8px 32px rgba(0,0,0,.45);
+  --font:'Inter',system-ui,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;line-height:1.5}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:10px}
+
+/* Layout */
+.app{display:flex;min-height:100vh}
+.sidebar{
+  width:260px;background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:50;
+  transition:transform .3s;
+}
+.sidebar-logo{
+  padding:24px 20px 18px;display:flex;align-items:center;gap:12px;
+  border-bottom:1px solid var(--border);
+}
+.sidebar-logo .badge{
+  background:var(--accent);color:#000;font-weight:800;font-size:.7rem;
+  padding:3px 8px;border-radius:4px;letter-spacing:.5px;
+}
+.sidebar-logo h1{font-size:1.05rem;font-weight:700;line-height:1.2}
+.sidebar-logo small{font-size:.7rem;color:var(--text3);display:block}
+.nav{padding:16px 12px;flex:1;overflow-y:auto}
+.nav-label{font-size:.65rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--text3);padding:8px 12px 6px;font-weight:600}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius-sm);
+  color:var(--text2);font-size:.875rem;font-weight:500;cursor:pointer;
+  transition:all .2s;margin-bottom:2px;border:none;background:none;width:100%;text-align:left;
+}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--accent-dim);color:var(--accent)}
+.nav-item svg{width:18px;height:18px;flex-shrink:0}
+.sidebar-footer{padding:16px;border-top:1px solid var(--border);font-size:.7rem;color:var(--text3);text-align:center}
+.sidebar-footer a{color:var(--accent);text-decoration:none}
+
+.main{margin-left:260px;flex:1;min-width:0;padding:28px 32px 48px}
+.page{display:none;animation:fadeIn .35s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* Header */
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px}
+.page-header h2{font-size:1.5rem;font-weight:700}
+.page-header p{color:var(--text2);font-size:.875rem;margin-top:2px}
+
+/* KPI cards */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:28px}
+.kpi{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:20px 18px;position:relative;overflow:hidden;
+}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kpi-color,var(--accent))}
+.kpi .label{font-size:.75rem;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.8px}
+.kpi .value{font-size:1.75rem;font-weight:800;margin-top:6px;font-family:var(--mono);color:var(--text)}
+.kpi .sub{font-size:.75rem;color:var(--text2);margin-top:4px}
+
+/* Cards */
+.card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:22px;margin-bottom:20px;box-shadow:var(--shadow);
+}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px}
+.card-header h3{font-size:1rem;font-weight:600}
+.card-header .hint{font-size:.75rem;color:var(--text3)}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px}
+@media(max-width:1100px){.grid-2,.grid-3{grid-template-columns:1fr}}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .main{margin-left:0;padding:20px 16px}
+  .menu-btn{display:flex!important}
+}
+
+.menu-btn{
+  display:none;position:fixed;top:16px;left:16px;z-index:60;
+  background:var(--bg3);border:1px solid var(--border);border-radius:10px;
+  width:42px;height:42px;align-items:center;justify-content:center;cursor:pointer;color:var(--text);
+}
+
+/* Chart containers */
+.chart-box{position:relative;height:300px}
+.chart-box.tall{height:380px}
+
+/* Tables */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{text-align:left;padding:10px 12px;color:var(--text3);font-weight:600;font-size:.72rem;
+  text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:11px 12px;border-bottom:1px solid var(--border);color:var(--text2)}
+tr:hover td{background:var(--bg3);color:var(--text)}
+.rank-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:28px;height:28px;border-radius:8px;font-weight:700;font-size:.75rem;
+  background:var(--bg4);color:var(--text2);font-family:var(--mono);
+}
+.rank-badge.gold{background:rgba(245,197,24,.2);color:var(--accent)}
+.rank-badge.silver{background:rgba(160,160,184,.2);color:#c0c0d0}
+.rank-badge.bronze{background:rgba(205,127,50,.2);color:#cd7f32}
+.movie-cell{display:flex;align-items:center;gap:12px}
+.movie-cell img{width:36px;height:54px;object-fit:cover;border-radius:4px;background:var(--bg4)}
+.movie-cell .t{font-weight:600;color:var(--text);font-size:.875rem}
+.movie-cell .s{font-size:.72rem;color:var(--text3)}
+.rating-pill{
+  display:inline-flex;align-items:center;gap:4px;background:var(--accent-dim);
+  color:var(--accent);font-weight:700;font-size:.8rem;padding:3px 10px;border-radius:20px;
+  font-family:var(--mono);
+}
+.genre-tag{
+  display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:500;
+  background:var(--bg4);color:var(--text2);margin:1px 2px;border:1px solid var(--border);
+}
+
+/* Search & filters */
+.filters{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;align-items:center}
+.filters input,.filters select{
+  background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);
+  color:var(--text);padding:9px 14px;font-family:var(--font);font-size:.85rem;outline:none;
+  transition:border-color .2s;
+}
+.filters input{min-width:220px}
+.filters input:focus,.filters select:focus{border-color:var(--accent)}
+.filters select{cursor:pointer}
+
+/* Movie grid */
+.movie-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
+.movie-card{
+  background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
+  overflow:hidden;cursor:pointer;transition:all .25s;
+}
+.movie-card:hover{transform:translateY(-4px);border-color:var(--accent);box-shadow:0 12px 28px rgba(0,0,0,.4)}
+.movie-card .poster{width:100%;aspect-ratio:2/3;object-fit:cover;background:var(--bg4);display:block}
+.movie-card .poster-ph{
+  width:100%;aspect-ratio:2/3;background:var(--bg4);display:flex;align-items:center;justify-content:center;
+  font-size:2.5rem;color:var(--text3);
+}
+.movie-card .body{padding:12px}
+.movie-card .title{font-size:.8rem;font-weight:600;line-height:1.3;margin-bottom:4px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.movie-card .meta{font-size:.7rem;color:var(--text3);display:flex;justify-content:space-between;align-items:center}
+
+/* Modal */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;display:none;
+  align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);
+}
+.modal-overlay.open{display:flex}
+.modal{
+  background:var(--bg2);border:1px solid var(--border);border-radius:18px;
+  max-width:720px;width:100%;max-height:90vh;overflow-y:auto;position:relative;
+  animation:fadeIn .3s ease;
+}
+.modal-close{
+  position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:50%;
+  background:var(--bg4);border:1px solid var(--border);color:var(--text);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:1.1rem;z-index:2;
+}
+.modal-body{display:grid;grid-template-columns:200px 1fr;gap:0}
+.modal-poster{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:18px 0 0 18px;background:var(--bg4)}
+.modal-poster-ph{width:100%;aspect-ratio:2/3;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:4rem;color:var(--text3);border-radius:18px 0 0 18px}
+.modal-info{padding:28px 28px 28px 24px}
+.modal-info h2{font-size:1.4rem;font-weight:700;margin-bottom:6px}
+.modal-info .mod-meta{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;align-items:center}
+.modal-info .plot{color:var(--text2);font-size:.875rem;line-height:1.65;margin-bottom:16px}
+.modal-info .stats-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-info .stat-box{background:var(--bg3);border-radius:10px;padding:12px;border:1px solid var(--border)}
+.modal-info .stat-box .sl{font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+.modal-info .stat-box .sv{font-size:1.1rem;font-weight:700;font-family:var(--mono);margin-top:2px}
+@media(max-width:600px){
+  .modal-body{grid-template-columns:1fr}
+  .modal-poster,.modal-poster-ph{border-radius:18px 18px 0 0;max-height:280px}
+}
+
+/* Pagination */
+.pagination{display:flex;gap:6px;justify-content:center;margin-top:24px;flex-wrap:wrap}
+.pagination button{
+  background:var(--bg3);border:1px solid var(--border);color:var(--text2);
+  padding:7px 14px;border-radius:8px;cursor:pointer;font-family:var(--font);font-size:.8rem;
+  transition:all .2s;
+}
+.pagination button:hover,.pagination button.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:600}
+.pagination button:disabled{opacity:.4;cursor:not-allowed}
+
+/* Empty */
+.empty{text-align:center;padding:48px 20px;color:var(--text3)}
+.empty .icon{font-size:2.5rem;margin-bottom:12px}
+
+/* Compare */
+.compare-selects{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:end;margin-bottom:24px}
+@media(max-width:700px){.compare-selects{grid-template-columns:1fr}}
+.compare-selects label{display:block;font-size:.75rem;color:var(--text3);margin-bottom:4px}
+.compare-selects select{
+  width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);
+  color:var(--text);padding:10px 14px;font-family:var(--font);font-size:.875rem;
+}
+.vs{font-weight:800;font-size:1.2rem;color:var(--accent);text-align:center;padding-bottom:8px}
+.btn{
+  background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);
+  padding:10px 22px;font-family:var(--font);font-weight:700;font-size:.875rem;cursor:pointer;
+  transition:background .2s;
+}
+.btn:hover{background:var(--accent2)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+</style>
+</head>
+<body>
+<button class="menu-btn" id="menuBtn" aria-label="Menu">☰</button>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div>
+      <h1>IMDb Analytics</h1>
+      <small>Top 250 Movies Dashboard</small>
+    </div>
+    <span class="badge">PRO</span>
+  </div>
+  <nav class="nav">
+    <div class="nav-label">Overview</div>
+    <button class="nav-item active" data-page="overview">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/></svg>
+      Dashboard
+    </button>
+    <button class="nav-item" data-page="movies">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/></svg>
+      All Movies
+    </button>
+    <button class="nav-item" data-page="genres">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"/></svg>
+      Genres
+    </button>
+    <div class="nav-label">Analysis</div>
+    <button class="nav-item" data-page="ratings">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+      Ratings Deep-Dive
+    </button>
+    <button class="nav-item" data-page="compare">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+      Compare Movies
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    Data: IMDb Top 250<br>
+    <a href="https://github.com/LiamTaghizadeh/IMDB_Analysis" target="_blank">GitHub Project</a>
+  </div>
+</aside>
+
+<main class="main">
+  <!-- ==================== OVERVIEW ==================== -->
+  <section class="page active" id="page-overview">
+    <div class="page-header">
+      <div>
+        <h2>Dashboard Overview</h2>
+        <p>High-level analytics of the IMDb Top 250 list</p>
+      </div>
+    </div>
+
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <h3>Rating Distribution</h3>
+          <span class="hint">How scores are spread</span>
+        </div>
+        <div class="chart-box"><canvas id="chartRatingDist"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3>Top Genres</h3>
+          <span class="hint">Most frequent genres</span>
+        </div>
+        <div class="chart-box"><canvas id="chartTopGenres"></canvas></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <h3>Content Rating Breakdown</h3>
+          <span class="hint">MPAA / age ratings</span>
+        </div>
+        <div class="chart-box"><canvas id="chartContent"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3>Runtime vs Rating</h3>
+          <span class="hint">Does longer mean better?</span>
+        </div>
+        <div class="chart-box"><canvas id="chartRuntimeRating"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>🏆 Top 10 Movies</h3>
+        <span class="hint">Highest ranked titles</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th><th>Title</th><th>Rating</th><th>Votes</th><th>Runtime</th><th>Genres</th>
+            </tr>
+          </thead>
+          <tbody id="top10Body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== MOVIES ==================== -->
+  <section class="page" id="page-movies">
+    <div class="page-header">
+      <div>
+        <h2>All Movies</h2>
+        <p>Browse, search and filter the full Top 250 list</p>
+      </div>
+    </div>
+    <div class="filters">
+      <input type="text" id="searchInput" placeholder="Search by title...">
+      <select id="genreFilter"><option value="">All Genres</option></select>
+      <select id="ratingFilter">
+        <option value="">All Ratings</option>
+        <option value="9+">9.0+</option>
+        <option value="8.5+">8.5 – 8.9</option>
+        <option value="8.0+">8.0 – 8.4</option>
+      </select>
+      <select id="sortFilter">
+        <option value="rank">Sort: Rank</option>
+        <option value="rating-desc">Rating ↓</option>
+        <option value="rating-asc">Rating ↑</option>
+        <option value="votes-desc">Votes ↓</option>
+        <option value="runtime-desc">Runtime ↓</option>
+        <option value="title">Title A–Z</option>
+      </select>
+      <select id="viewMode">
+        <option value="grid">Grid View</option>
+        <option value="table">Table View</option>
+      </select>
+    </div>
+    <div id="moviesContainer"></div>
+    <div class="pagination" id="moviesPagination"></div>
+  </section>
+
+  <!-- ==================== GENRES ==================== -->
+  <section class="page" id="page-genres">
+    <div class="page-header">
+      <div>
+        <h2>Genre Analysis</h2>
+        <p>Deep dive into genre frequency, average ratings and popularity</p>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header"><h3>Genre Frequency</h3></div>
+        <div class="chart-box tall"><canvas id="chartGenreFreq"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Avg Rating by Genre</h3><span class="hint">Min 5 movies</span></div>
+        <div class="chart-box tall"><canvas id="chartGenreRating"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Genre Stats Table</h3></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Genre</th><th>Count</th><th>Avg Rating</th><th>Avg Votes</th><th>Avg Runtime</th><th>Top Movie</th></tr>
+          </thead>
+          <tbody id="genreTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== RATINGS ==================== -->
+  <section class="page" id="page-ratings">
+    <div class="page-header">
+      <div>
+        <h2>Ratings Deep-Dive</h2>
+        <p>Statistical analysis of scores and vote counts</p>
+      </div>
+    </div>
+    <div class="kpi-grid" id="ratingKpis"></div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header"><h3>Votes vs Rating Scatter</h3></div>
+        <div class="chart-box tall"><canvas id="chartVotesRating"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Runtime Distribution</h3></div>
+        <div class="chart-box tall"><canvas id="chartRuntimeDist"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Highest Voted Movies</h3></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Title</th><th>Rating</th><th>Votes</th><th>Runtime</th></tr></thead>
+          <tbody id="topVotesBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== COMPARE ==================== -->
+  <section class="page" id="page-compare">
+    <div class="page-header">
+      <div>
+        <h2>Compare Movies</h2>
+        <p>Pick two titles and compare their stats side by side</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="compare-selects">
+        <div>
+          <label>Movie A</label>
+          <select id="cmpA"></select>
+        </div>
+        <div class="vs">VS</div>
+        <div>
+          <label>Movie B</label>
+          <select id="cmpB"></select>
+        </div>
+      </div>
+      <div style="text-align:center;margin-bottom:8px">
+        <button class="btn" id="cmpBtn">Compare</button>
+      </div>
+    </div>
+    <div id="cmpResult" style="display:none">
+      <div class="grid-2" id="cmpCards"></div>
+      <div class="card">
+        <div class="card-header"><h3>Spec Comparison</h3></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Metric</th><th id="cmpThA">A</th><th id="cmpThB">B</th><th>Winner</th></tr></thead>
+            <tbody id="cmpBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Radar Comparison</h3></div>
+        <div class="chart-box tall" style="max-width:480px;margin:0 auto"><canvas id="chartCompare"></canvas></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <button class="modal-close" id="modalClose">✕</button>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+// ========== DATA (embedded) ==========
+const MOVIES = [{"rank":1,"imdb_id":"tt0111161","title":"The Shawshank Redemption","rating":9.3,"votes":3203693,"genre":["Drama"],"duration_min":142,"content_rating":"R","description":"After a banker is sentenced to life in Shawshank Prison, he forms an unlikely friendship with a seasoned inmate and clings to hope amid cruelty and corruption.","image_url":"https://m.media-amazon.com/images/M/MV5BMDAyY2FhYjctNDc5OS00MDNlLThiMGUtY2UxYWVkNGY2ZjljXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0111161/"},{"rank":2,"imdb_id":"tt0068646","title":"The Godfather","rating":9.2,"votes":2234947,"genre":["Crime","Drama"],"duration_min":175,"content_rating":"R","description":"The aging patriarch of an organized crime dynasty transfers control of his clandestine empire to his reluctant son.","image_url":"https://m.media-amazon.com/images/M/MV5BNGEwYjgwOGQtYjg5ZS00Njc1LTk2ZGEtM2QwZWQ2NjdhZTE5XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0068646/"},{"rank":3,"imdb_id":"tt0468569","title":"The Dark Knight","rating":9.1,"votes":3184584,"genre":["Crime","Thriller"],"duration_min":152,"content_rating":"PG-13","description":"When a menace known as the Joker wreaks havoc and chaos on the people of Gotham, Batman, James Gordon and Harvey Dent must work together to put an end to the madness.","image_url":"https://m.media-amazon.com/images/M/MV5BMTMxNTMwODM0NF5BMl5BanBnXkFtZTcwODAyMTk2Mw@@._V1_.jpg","url":"https://www.imdb.com/title/tt0468569/"},{"rank":4,"imdb_id":"tt0071562","title":"The Godfather Part II","rating":9.0,"votes":1499846,"genre":["Crime","Drama"],"duration_min":202,"content_rating":"R","description":"The early life and career of Vito Corleone in 1920s New York City is portrayed, while his son, Michael, expands and tightens his grip on the family crime syndicate.","image_url":"https://m.media-amazon.com/images/M/MV5BMDIxMzBlZDktZjMxNy00ZGI4LTgxNDEtYWRlNzRjMjJmOGQ1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0071562/"},{"rank":5,"imdb_id":"tt0050083","title":"12 Angry Men","rating":9.0,"votes":989802,"genre":["Crime","Drama"],"duration_min":96,"content_rating":"Approved","description":"The jury in a New York City murder trial is frustrated by a single member whose skeptical caution forces them to more carefully consider the evidence before jumping to a hasty verdict.","image_url":"https://m.media-amazon.com/images/M/MV5BYjE4NzdmOTYtYjc5Yi00YzBiLWEzNDEtNTgxZGQ2MWVkN2NiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0050083/"},{"rank":6,"imdb_id":"tt0167260","title":"The Lord of the Rings: The Return of the King","rating":9.0,"votes":2173068,"genre":["Adventure","Drama","Fantasy"],"duration_min":201,"content_rating":"PG-13","description":"Gandalf and Aragorn lead the World of Men against Sauron&apos;s army to draw his gaze from Frodo and Sam as they approach Mount Doom with the One Ring.","image_url":"https://m.media-amazon.com/images/M/MV5BMTZkMjBjNWMtZGI5OC00MGU0LTk4ZTItODg2NWM3NTVmNWQ4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0167260/"},{"rank":7,"imdb_id":"tt0108052","title":"Schindler&apos;s List","rating":9.0,"votes":1590339,"genre":["Biography","Drama","History"],"duration_min":195,"content_rating":"R","description":"In German-occupied Poland during World War II, industrialist Oskar Schindler gradually becomes concerned for his Jewish workforce after witnessing their persecution by the Nazis.","image_url":"https://m.media-amazon.com/images/M/MV5BNjM1ZDQxYWUtMzQyZS00MTE1LWJmZGYtNGUyNTdlYjM3ZmVmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0108052/"},{"rank":8,"imdb_id":"tt0120737","title":"The Lord of the Rings: The Fellowship of the Ring","rating":8.9,"votes":2215488,"genre":["Adventure","Drama","Fantasy"],"duration_min":178,"content_rating":"PG-13","description":"A meek Hobbit from the Shire and eight companions set out on a journey to destroy the powerful One Ring and save Middle-earth from the Dark Lord Sauron.","image_url":"https://m.media-amazon.com/images/M/MV5BNzIxMDQ2YTctNDY4MC00ZTRhLTk4ODQtMTVlOWY4NTdiYmMwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0120737/"},{"rank":9,"imdb_id":"tt0110912","title":"Pulp Fiction","rating":8.8,"votes":2445494,"genre":["Crime","Drama"],"duration_min":154,"content_rating":"R","description":"The lives of two mob hitmen, a boxer, a gangster and his wife, and a pair of diner bandits intertwine in four tales of violence and redemption.","image_url":"https://m.media-amazon.com/images/M/MV5BYTViYTE3ZGQtNDBlMC00ZTAyLTkyODMtZGRiZDg0MjA2YThkXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0110912/"},{"rank":10,"imdb_id":"tt0060196","title":"Il buono, il brutto, il cattivo","rating":8.8,"votes":893261,"genre":["Adventure","Drama","Western"],"duration_min":178,"content_rating":"R","description":"A bounty-hunting scam joins two men in an uneasy alliance against a third in a race to find a fortune in gold buried in a remote cemetery.","image_url":"https://m.media-amazon.com/images/M/MV5BMWM5ZjQxM2YtNDlmYi00ZDNhLWI4MWUtN2VkYjBlMTY1ZTkwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0060196/"},{"rank":11,"imdb_id":"tt0167261","title":"The Lord of the Rings: The Two Towers","rating":8.8,"votes":1965020,"genre":["Adventure","Drama","Fantasy"],"duration_min":179,"content_rating":"PG-13","description":"While Frodo and Sam edge closer to Mordor with the help of the shifty Gollum, the divided fellowship makes a stand against Sauron&apos;s new ally, Saruman, and his hordes of Isengard.","image_url":"https://m.media-amazon.com/images/M/MV5BMGQxMDdiOWUtYjc1Ni00YzM1LWE2NjMtZTg3Y2JkMjEzMTJjXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0167261/"},{"rank":12,"imdb_id":"tt0109830","title":"Forrest Gump","rating":8.8,"votes":2507384,"genre":["Drama","Romance"],"duration_min":142,"content_rating":"PG-13","description":"The history of the United States from the 1950s to the &apos;70s unfolds from the perspective of an Alabama man with an IQ of 75, who yearns to be reunited with his childhood sweetheart.","image_url":"https://m.media-amazon.com/images/M/MV5BNDYwNzVjMTItZmU5YS00YjQ5LTljYjgtMjY2NDVmYWMyNWFmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0109830/"},{"rank":13,"imdb_id":"tt0137523","title":"Fight Club","rating":8.8,"votes":2625411,"genre":["Crime","Drama","Thriller"],"duration_min":139,"content_rating":"R","description":"An insomniac office worker and a devil-may-care soap maker form an underground fight club that evolves into much more.","image_url":"https://m.media-amazon.com/images/M/MV5BOTgyOGQ1NDItNGU3Ny00MjU3LTg2YWEtNmEyYjBiMjI1Y2M5XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0137523/"},{"rank":14,"imdb_id":"tt1375666","title":"Inception","rating":8.8,"votes":2830713,"genre":["Adventure","Sci-Fi","Thriller"],"duration_min":148,"content_rating":"PG-13","description":"A thief who steals corporate secrets through the use of dream-sharing technology is given the inverse task of planting an idea into the mind of a CEO, but his tragic past may doom the project and his team to disaster.","image_url":"https://m.media-amazon.com/images/M/MV5BMjAxMzY3NjcxNF5BMl5BanBnXkFtZTcwNTI5OTM0Mw@@._V1_.jpg","url":"https://www.imdb.com/title/tt1375666/"},{"rank":15,"imdb_id":"tt0080684","title":"Star Wars: Episode V - The Empire Strikes Back","rating":8.7,"votes":1510829,"genre":["Adventure","Fantasy","Sci-Fi"],"duration_min":124,"content_rating":"PG","description":"After the Empire overpowers the Rebel Alliance, Luke Skywalker begins training with Jedi Master Yoda, while Darth Vader and bounty hunter Boba Fett pursue his friends across the galaxy.","image_url":"https://m.media-amazon.com/images/M/MV5BMTkxNGFlNDktZmJkNC00MDdhLTg0MTEtZjZiYWI3MGE5NWIwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0080684/"},{"rank":16,"imdb_id":"tt0133093","title":"The Matrix","rating":8.7,"votes":2257488,"genre":["Action","Sci-Fi"],"duration_min":136,"content_rating":"R","description":"A computer hacker discovers that his life is nothing more than an elaborate simulation run by an evil AI.","image_url":"https://m.media-amazon.com/images/M/MV5BN2NmN2VhMTQtMDNiOS00NDlhLTliMjgtODE2ZTY0ODQyNDRhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0133093/"},{"rank":17,"imdb_id":"tt0816692","title":"Interstellar","rating":8.7,"votes":2552324,"genre":["Adventure","Drama","Sci-Fi"],"duration_min":169,"content_rating":"PG-13","description":"In a dystopian future where Earth has become near-uninhabitable, a team of astronauts embark on a mission to find a new home for humanity.","image_url":"https://m.media-amazon.com/images/M/MV5BYzdjMDAxZGItMjI2My00ODA1LTlkNzItOWFjMDU5ZDJlYWY3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0816692/"},{"rank":18,"imdb_id":"tt0099685","title":"GoodFellas","rating":8.7,"votes":1398585,"genre":["Biography","Crime","Drama"],"duration_min":145,"content_rating":"R","description":"The story of Henry Hill and his life in the mafia, covering his relationship with his wife Karen and his mob partners Jimmy Conway and Tommy DeVito.","image_url":"https://m.media-amazon.com/images/M/MV5BN2E5NzI2ZGMtY2VjNi00YTRjLWI1MDUtZGY5OWU1MWJjZjRjXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0099685/"},{"rank":19,"imdb_id":"tt0073486","title":"One Flew Over the Cuckoo&apos;s Nest","rating":8.6,"votes":1159563,"genre":["Drama"],"duration_min":133,"content_rating":"R","description":"A rebellious convict is sent to a psychiatric hospital for evaluation in 1963 Oregon, and encourages his docile companions to take more control of their lives and defy the tyrannical head nurse.","image_url":"https://m.media-amazon.com/images/M/MV5BYjBkMjgzMzYtNzRiMS00NDc3LWE4YTUtZjYxYjZhNjNhYzhhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0073486/"},{"rank":20,"imdb_id":"tt0114369","title":"Se7en","rating":8.6,"votes":2032758,"genre":["Crime","Drama","Mystery"],"duration_min":127,"content_rating":"R","description":"Two detectives try to track down a serial killer who chooses his victims based on the Seven Deadly Sins.","image_url":"https://m.media-amazon.com/images/M/MV5BY2IzNzMxZjctZjUxZi00YzAxLTk3ZjMtODFjODdhMDU5NDM1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0114369/"},{"rank":21,"imdb_id":"tt0038650","title":"It&apos;s a Wonderful Life","rating":8.6,"votes":555478,"genre":["Drama","Family","Fantasy"],"duration_min":130,"content_rating":"PG","description":"An angel is sent from Heaven to help a desperately frustrated businessman see the value of his own life.","image_url":"https://m.media-amazon.com/images/M/MV5BMDM4OWFhYjEtNTE5Yy00NjcyLTg5N2UtZDQwNDZlYjlmNDU5XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0038650/"},{"rank":22,"imdb_id":"tt0102926","title":"The Silence of the Lambs","rating":8.6,"votes":1731318,"genre":["Crime","Drama","Horror"],"duration_min":118,"content_rating":"R","description":"A young FBI cadet is aided by a manipulative cannibal killer in her pursuit of a madman who skins his victims.","image_url":"https://m.media-amazon.com/images/M/MV5BNDdhOGJhYzctYzYwZC00YmI2LWI0MjctYjg4ODdlMDExYjBlXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0102926/"},{"rank":23,"imdb_id":"tt0120815","title":"Saving Private Ryan","rating":8.6,"votes":1647136,"genre":["Drama","War"],"duration_min":169,"content_rating":"R","description":"Following the Normandy Landings, a group of U.S. soldiers go behind enemy lines to retrieve a paratrooper whose brothers have been killed in action.","image_url":"https://m.media-amazon.com/images/M/MV5BZGZhZGQ1ZWUtZTZjYS00MDJhLWFkYjctN2ZlYjE5NWYwZDM2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0120815/"},{"rank":24,"imdb_id":"tt0047478","title":"Shichinin no samurai","rating":8.6,"votes":403019,"genre":["Action","Drama"],"duration_min":207,"content_rating":"Not Rated","description":"Farmers from a village exploited by bandits hire a veteran samurai for protection, and he gathers six other samurai to join him.","image_url":"https://m.media-amazon.com/images/M/MV5BZjliMWExOTMtZDQ3ZS00NWU3LWIyN2EtMjllNzk3ZTNlYzg4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0047478/"},{"rank":25,"imdb_id":"tt0120689","title":"The Green Mile","rating":8.6,"votes":1568481,"genre":["Crime","Drama","Fantasy"],"duration_min":189,"content_rating":"R","description":"A death row guard learns that a gentle giant in his charge possesses a mysterious gift.","image_url":"https://m.media-amazon.com/images/M/MV5BMTUxMzQyNjA5MF5BMl5BanBnXkFtZTYwOTU2NTY3._V1_.jpg","url":"https://www.imdb.com/title/tt0120689/"},{"rank":26,"imdb_id":"tt0317248","title":"Cidade de Deus","rating":8.6,"votes":874255,"genre":["Crime","Drama"],"duration_min":130,"content_rating":"R","description":"In the slums of Rio, two kids&apos; paths diverge as one struggles to become a photographer and the other a kingpin.","image_url":"https://m.media-amazon.com/images/M/MV5BYjY4NGI5OTUtY2ZlZS00Zjk4LTk5N2MtN2JmYWVjNGNmMGRlXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0317248/"},{"rank":27,"imdb_id":"tt0118799","title":"La vita è bella","rating":8.6,"votes":815883,"genre":["Comedy","Drama","Romance"],"duration_min":116,"content_rating":"PG-13","description":"When an open-minded Jewish waiter and his son become victims of the Holocaust, he uses a perfect mixture of will, humor and imagination to protect his son from the dangers around their camp.","image_url":"https://m.media-amazon.com/images/M/MV5BZTBhOGYzZjQtYzE0Mi00MGIwLWE0MWYtNzMxNTM2OTFkM2NjXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0118799/"},{"rank":28,"imdb_id":"tt0103064","title":"Terminator 2: Judgment Day","rating":8.6,"votes":1288634,"genre":["Action","Adventure","Sci-Fi"],"duration_min":137,"content_rating":"R","description":"A cyborg from the future, identical to the one who failed to kill Sarah Connor, must now protect her ten-year-old son John from an even more advanced and powerful cyborg.","image_url":"https://m.media-amazon.com/images/M/MV5BNGMyMGNkMDUtMjc2Ni00NWFlLTgyODEtZTY2MzBiZTg0OWZiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0103064/"},{"rank":29,"imdb_id":"tt0088763","title":"Back to the Future","rating":8.5,"votes":1460171,"genre":["Adventure","Comedy","Sci-Fi"],"duration_min":116,"content_rating":"PG","description":"Marty McFly, a 17-year-old high school student, is accidentally sent 30 years into the past in a time-traveling DeLorean invented by his close friend, the maverick scientist Doc Brown.","image_url":"https://m.media-amazon.com/images/M/MV5BZmM3ZjE0NzctNjBiOC00MDZmLTgzMTUtNGVlOWFlOTNiZDJiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0088763/"},{"rank":30,"imdb_id":"tt0076759","title":"Star Wars","rating":8.6,"votes":1576125,"genre":["Action","Adventure","Fantasy"],"duration_min":121,"content_rating":"PG","description":"A farmboy joins forces with various allies to save their galaxy from the evil Empire&apos;s planet-destroying battle station, while also rescuing the princess leading the rebellion against them.","image_url":"https://m.media-amazon.com/images/M/MV5BOGUwMDk0Y2MtNjBlNi00NmRiLTk2MWYtMGMyMDlhYmI4ZDBjXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0076759/"},{"rank":31,"imdb_id":"tt6019206","title":"Kill Bill: The Whole Bloody Affair","rating":8.7,"votes":46455,"genre":["Action","Crime","Thriller"],"duration_min":253,"content_rating":"Unrated","description":"A female assassin seeks revenge on her former lover and squad members, all of whom left her for dead.","image_url":"https://m.media-amazon.com/images/M/MV5BZDc2YzhkODAtZmRmZS00YzcxLWJkYWEtM2ZhZjY3MmMyZmJiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt6019206/"},{"rank":32,"imdb_id":"tt0245429","title":"Sen to Chihiro no kamikakushi","rating":8.6,"votes":973581,"genre":["Animation","Adventure","Family"],"duration_min":124,"content_rating":"PG","description":"During her family&apos;s move to the suburbs, a sullen 10-year-old girl wanders into a world ruled by gods, witches and spirits, and where humans are changed into beasts.","image_url":"https://m.media-amazon.com/images/M/MV5BNTEyNmEwOWUtYzkyOC00ZTQ4LTllZmUtMjk0Y2YwOGUzYjRiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0245429/"},{"rank":33,"imdb_id":"tt0172495","title":"Gladiator","rating":8.5,"votes":1858719,"genre":["Action","Adventure","Drama"],"duration_min":155,"content_rating":"R","description":"A former Roman General sets out to exact vengeance against the corrupt emperor who murdered his family and sent him into slavery.","image_url":"https://m.media-amazon.com/images/M/MV5BYWQ4YmNjYjEtOWE1Zi00Y2U4LWI4NTAtMTU0MjkxNWQ1ZmJiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0172495/"},{"rank":34,"imdb_id":"tt0253474","title":"The Pianist","rating":8.5,"votes":1015833,"genre":["Biography","Drama","Music"],"duration_min":150,"content_rating":"R","description":"During WWII, acclaimed Polish musician Wladyslaw faces various struggles as he loses contact with his family. As the situation worsens, he hides in the ruins of Warsaw in order to survive.","image_url":"https://m.media-amazon.com/images/M/MV5BMjEwNmEwYjgtNTk3ZC00NjljLTg5ZDctZTY3ZGQwZjRkZmQxXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0253474/"},{"rank":35,"imdb_id":"tt6751668","title":"Gisaengchung","rating":8.5,"votes":1174851,"genre":["Drama","Thriller"],"duration_min":132,"content_rating":"R","description":"Greed and class discrimination threaten the newly formed symbiotic relationship between the wealthy Park family and the destitute Kim clan.","image_url":"https://m.media-amazon.com/images/M/MV5BYjk1Y2U4MjQtY2ZiNS00OWQyLWI3MmYtZWUwNmRjYWRiNWNhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt6751668/"},{"rank":36,"imdb_id":"tt0095327","title":"Hotaru no haka","rating":8.5,"votes":389361,"genre":["Animation","Drama","War"],"duration_min":88,"content_rating":"Not Rated","description":"A young boy and his little sister struggle to survive in Japan during World War II.","image_url":"https://m.media-amazon.com/images/M/MV5BNTY5MmE2OGMtN2IxNC00MDY4LTkwMGEtZDUzOTYyNWE0ZTNjXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0095327/"},{"rank":37,"imdb_id":"tt0054215","title":"Psycho","rating":8.5,"votes":788335,"genre":["Drama","Horror","Mystery"],"duration_min":109,"content_rating":"R","description":"A secretary on the run for embezzlement takes refuge at a secluded California motel owned by a repressed man and his overbearing mother.","image_url":"https://m.media-amazon.com/images/M/MV5BYjZhMzFiZjItODA3ZC00MmRhLWIzMGYtMmVjOWUwYTA3MTRjXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0054215/"},{"rank":38,"imdb_id":"tt0056058","title":"Seppuku","rating":8.6,"votes":92207,"genre":["Drama","Mystery"],"duration_min":133,"content_rating":"Not Rated","description":"When a ronin requesting seppuku at a feudal lord&apos;s palace is told of the brutal suicide of another ronin who previously visited, he reveals how their pasts are intertwined - and in doing so challenges the clan&apos;s integrity.","image_url":"https://m.media-amazon.com/images/M/MV5BZThiZjU5ZDQtZDI4Mi00ZGYyLTkzOTktYmIzZTFlZTkxYzg5XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0056058/"},{"rank":39,"imdb_id":"tt0110357","title":"The Lion King","rating":8.5,"votes":1264979,"genre":["Animation","Adventure","Drama"],"duration_min":88,"content_rating":"G","description":"Lion prince Simba and his father are targeted by his bitter uncle, who wants to ascend the throne himself.","image_url":"https://m.media-amazon.com/images/M/MV5BZGRiZDZhZjItM2M3ZC00Y2IyLTk3Y2MtMWY5YjliNDFkZTJlXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0110357/"},{"rank":40,"imdb_id":"tt0407887","title":"The Departed","rating":8.5,"votes":1561456,"genre":["Crime","Drama","Thriller"],"duration_min":151,"content_rating":"R","description":"An undercover cop and a mole in the police attempt to identify each other while infiltrating an Irish gang in South Boston.","image_url":"https://m.media-amazon.com/images/M/MV5BMTI1MTY2OTIxNV5BMl5BanBnXkFtZTYwNjQ4NjY3._V1_.jpg","url":"https://www.imdb.com/title/tt0407887/"},{"rank":41,"imdb_id":"tt2582802","title":"Whiplash","rating":8.5,"votes":1163768,"genre":["Drama","Music"],"duration_min":106,"content_rating":"R","description":"A promising young drummer enrolls at a cut-throat music conservatory where his dreams of greatness are mentored by an instructor who will stop at nothing to realize a student&apos;s potential.","image_url":"https://m.media-amazon.com/images/M/MV5BMDFjOWFkYzktYzhhMC00NmYyLTkwY2EtYjViMDhmNzg0OGFkXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt2582802/"},{"rank":42,"imdb_id":"tt0482571","title":"The Prestige","rating":8.5,"votes":1597388,"genre":["Drama","Mystery","Sci-Fi"],"duration_min":130,"content_rating":"PG-13","description":"Two magicians dismantle their lives to outmaneuver each other following a shared tragedy. They chase the ultimate illusion across Victorian London, sacrificing sanity and safety to master a teleportation feat that defies all logic.","image_url":"https://m.media-amazon.com/images/M/MV5BM2Y0YmM5MWYtZTYzNi00ZjU5LTlmOGYtZDQ4ODQyMjAzNjQ2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0482571/"},{"rank":43,"imdb_id":"tt0120586","title":"American History X","rating":8.5,"votes":1277394,"genre":["Crime","Drama"],"duration_min":119,"content_rating":"R","description":"A neo-Nazi is released from prison a changed man and hopes to prevent his younger brother from following in his footsteps.","image_url":"https://m.media-amazon.com/images/M/MV5BMzhiOTQ0NDItOTg0Zi00OGVmLWE0OGEtMTI4NDM0NWMxZWU4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0120586/"},{"rank":44,"imdb_id":"tt0110413","title":"Léon","rating":8.5,"votes":1355678,"genre":["Action","Crime","Drama"],"duration_min":110,"content_rating":"R","description":"When her family is murdered by a group of corrupt officers led by the tyrannical Norman Stansfield, a young 12-year-old girl enlists the help of an Italian-American hitman to seek revenge.","image_url":"https://m.media-amazon.com/images/M/MV5BNGRkYTNhOWQtYmI0Ni00MjZhLWJmMzAtMTA2Mjg4NGNiNDU0XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0110413/"},{"rank":45,"imdb_id":"tt9362722","title":"Spider-Man: Across the Spider-Verse","rating":8.5,"votes":533055,"genre":["Animation","Action","Adventure"],"duration_min":140,"content_rating":"PG","description":"Traveling across the multiverse, Miles Morales meets a new team of Spider-People, made up of heroes from different dimensions. But when the heroes clash over how to deal with a new threat, Miles finds himself at a crossroads.","image_url":"https://m.media-amazon.com/images/M/MV5BNThiZjA3MjItZGY5Ni00ZmJhLWEwN2EtOTBlYTA4Y2E0M2ZmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt9362722/"},{"rank":46,"imdb_id":"tt0095765","title":"Nuovo Cinema Paradiso","rating":8.5,"votes":317867,"genre":["Drama","Romance"],"duration_min":174,"content_rating":"PG","description":"Salvatore, a famous film director, returns to his hometown for the funeral of the local theater&apos;s film projectionist, Alfredo. He reminisces about his life as a young boy falling in love with cinema.","image_url":"https://m.media-amazon.com/images/M/MV5BMTljNzc4YWEtYTZlMS00ODMyLWIwMTAtNWQxY2VkMDEwYTk5XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0095765/"},{"rank":47,"imdb_id":"tt0034583","title":"Casablanca","rating":8.5,"votes":656715,"genre":["Drama","Romance","War"],"duration_min":102,"content_rating":"PG","description":"A cynical expatriate American cafe owner struggles to decide whether or not to help his former lover and her fugitive husband escape the Nazis in French Morocco.","image_url":"https://m.media-amazon.com/images/M/MV5BNWEzN2U1YTYtYTQyMS00NTVkLWE2NGQtZWFlMmM0MDNjMmRiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0034583/"},{"rank":48,"imdb_id":"tt1675434","title":"Intouchables","rating":8.5,"votes":1032213,"genre":["Comedy","Drama"],"duration_min":112,"content_rating":"R","description":"After he becomes a quadriplegic from a paragliding accident, an aristocrat hires a young man from the projects to be his caregiver.","image_url":"https://m.media-amazon.com/images/M/MV5BMTYxNDA3MDQwNl5BMl5BanBnXkFtZTcwNTU4Mzc1Nw@@._V1_.jpg","url":"https://www.imdb.com/title/tt1675434/"},{"rank":49,"imdb_id":"tt0114814","title":"The Usual Suspects","rating":8.5,"votes":1243013,"genre":["Crime","Drama","Mystery"],"duration_min":106,"content_rating":"R","description":"The sole survivor of a pier shoot-out tells the story of how a notorious criminal influenced the events that began with five criminals meeting in a seemingly random police lineup.","image_url":"https://m.media-amazon.com/images/M/MV5BOTE5MDUxZDUtZWZmZC00NDVmLWFhOGQtNWI2YTc4NzY3MGQ0XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0114814/"},{"rank":50,"imdb_id":"tt1853728","title":"Django Unchained","rating":8.5,"votes":1892860,"genre":["Drama","Western"],"duration_min":165,"content_rating":"R","description":"With the help of a German bounty-hunter, a freed slave sets out to rescue his wife from a brutal plantation owner in Mississippi.","image_url":"https://m.media-amazon.com/images/M/MV5BMjIyNTQ5NjQ1OV5BMl5BanBnXkFtZTcwODg1MDU4OA@@._V1_.jpg","url":"https://www.imdb.com/title/tt1853728/"},{"rank":51,"imdb_id":"tt0078748","title":"Alien","rating":8.4,"votes":1068090,"genre":["Horror","Sci-Fi"],"duration_min":117,"content_rating":"R","description":"After investigating a mysterious transmission of unknown origin, the crew of a commercial spacecraft encounters a deadly lifeform.","image_url":"https://m.media-amazon.com/images/M/MV5BN2NhMDk2MmEtZDQzOC00MmY5LThhYzAtMDdjZGFjOGZjMjdjXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0078748/"},{"rank":52,"imdb_id":"tt0047396","title":"Rear Window","rating":8.4,"votes":570119,"genre":["Drama","Mystery","Thriller"],"duration_min":112,"content_rating":"PG","description":"A bored photographer recovering from a broken leg passes the time by watching his neighbors and begins to suspect one of them of murder.","image_url":"https://m.media-amazon.com/images/M/MV5BODZhOWI1ODgtMzdiOS00YjNkLTgwOGUtYmIyZDg5ZmQwMzQ1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0047396/"},{"rank":53,"imdb_id":"tt0027977","title":"Modern Times","rating":8.5,"votes":286027,"genre":["Comedy","Drama","Romance"],"duration_min":87,"content_rating":"G","description":"The Tramp struggles to live in modern industrial society with the help of a young homeless woman.","image_url":"https://m.media-amazon.com/images/M/MV5BODVkZGFhNGQtYjdiYi00Njc4LWFmYTItNTlmNzJjMTg1ZDc5XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0027977/"},{"rank":54,"imdb_id":"tt0064116","title":"C&apos;era una volta il West","rating":8.5,"votes":385279,"genre":["Drama","Western"],"duration_min":145,"content_rating":"PG-13","description":"A mysterious stranger with a harmonica teams up with a notorious desperado to protect a beautiful widow and her land from a ruthless assassin in the employ of a railroad tycoon.","image_url":"https://m.media-amazon.com/images/M/MV5BZjYyNGY1MDEtN2I1MC00MGVhLTljZTYtODQ1NzQ0ODc2NzZlXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0064116/"},{"rank":55,"imdb_id":"tt0021749","title":"City Lights","rating":8.5,"votes":217010,"genre":["Comedy","Drama","Romance"],"duration_min":87,"content_rating":"G","description":"With the aid of a wealthy erratic tippler, a dewy-eyed tramp who has fallen in love with a blind flower girl accumulates money to be able to help her medically.","image_url":"https://m.media-amazon.com/images/M/MV5BM2U4NjgzODUtODkyOC00YTE2LTlhNTItYzFlYmM1NTEzZDA2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0021749/"},{"rank":56,"imdb_id":"tt0910970","title":"WALL·E","rating":8.4,"votes":1328107,"genre":["Animation","Adventure","Family"],"duration_min":98,"content_rating":"G","description":"In a future where humans have temporarily abandoned Earth, a trash-compacting robot falls in love with a flying droid and helps her on her quest to restore hope to mankind.","image_url":"https://m.media-amazon.com/images/M/MV5BMjExMTg5OTU0NF5BMl5BanBnXkFtZTcwMjMxMzMzMw@@._V1_.jpg","url":"https://www.imdb.com/title/tt0910970/"},{"rank":57,"imdb_id":"tt0078788","title":"Apocalypse Now","rating":8.4,"votes":772845,"genre":["Drama","Mystery","War"],"duration_min":147,"content_rating":"R","description":"A U.S. Army officer serving in Vietnam is tasked with assassinating a renegade Special Forces Colonel who sees himself as a god.","image_url":"https://m.media-amazon.com/images/M/MV5BZDhiMTljYjYtODc1Yy00MmEwLTg2OTYtYmE1YTRmNDE4MmEwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0078788/"},{"rank":58,"imdb_id":"tt0209144","title":"Memento","rating":8.4,"votes":1440752,"genre":["Mystery","Thriller"],"duration_min":113,"content_rating":"R","description":"A former insurance investigator who now suffers from anterograde amnesia uses notes and tattoos to hunt down his wife&apos;s murderer.","image_url":"https://m.media-amazon.com/images/M/MV5BMGQ3Y2Q4NjktN2E4Ny00Y2Q2LTliZDUtZTNiNjRhY2I0NGIyXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0209144/"},{"rank":59,"imdb_id":"tt4154756","title":"Avengers: Infinity War","rating":8.4,"votes":1382059,"genre":["Action","Adventure","Sci-Fi"],"duration_min":149,"content_rating":"PG-13","description":"The Avengers and their allies must be willing to sacrifice all in an attempt to defeat the powerful Thanos before his blitz of devastation and ruin puts an end to the universe.","image_url":"https://m.media-amazon.com/images/M/MV5BMjMxNjY2MDU1OV5BMl5BanBnXkFtZTgwNzY1MTUwNTM@._V1_.jpg","url":"https://www.imdb.com/title/tt4154756/"},{"rank":60,"imdb_id":"tt15239678","title":"Dune: Part Two","rating":8.4,"votes":770344,"genre":["Action","Adventure","Drama"],"duration_min":166,"content_rating":"PG-13","description":"Paul Atreides unites with the Fremen while on a warpath of revenge against the conspirators who destroyed his family. Facing a choice between the love of his life and the fate of the universe, he endeavors to prevent a terrible fu...","image_url":"https://m.media-amazon.com/images/M/MV5BNTc0YmQxMjEtODI5MC00NjFiLTlkMWUtOGQ5NjFmYWUyZGJhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt15239678/"},{"rank":61,"imdb_id":"tt0082971","title":"Raiders of the Lost Ark","rating":8.4,"votes":1113439,"genre":["Adventure"],"duration_min":115,"content_rating":"PG","description":"In 1936, archaeologist Indiana Jones is tasked by Army Intelligence to help locate a legendary ancient power, the Ark of Covenant, before the Nazis get it first.","image_url":"https://m.media-amazon.com/images/M/MV5BOGNhMjg2ZjgtYzk4Ni00MTViLTg1MmUtYzM2MDZiYjZlMmU3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0082971/"},{"rank":62,"imdb_id":"tt4633694","title":"Spider-Man: Into the Spider-Verse","rating":8.4,"votes":797081,"genre":["Animation","Action","Adventure"],"duration_min":117,"content_rating":"PG","description":"Teen Miles Morales becomes the Spider-Man of his universe and must join with five spider-powered individuals from other dimensions to stop a threat for all realities.","image_url":"https://m.media-amazon.com/images/M/MV5BMjMwNDkxMTgzOF5BMl5BanBnXkFtZTgwNTkwNTQ3NjM@._V1_.jpg","url":"https://www.imdb.com/title/tt4633694/"},{"rank":63,"imdb_id":"tt0405094","title":"Das Leben der Anderen","rating":8.4,"votes":444536,"genre":["Drama","Mystery","Thriller"],"duration_min":137,"content_rating":"R","description":"In 1984 East Berlin, an agent of the secret police conducting surveillance on a writer and his lover finds himself becoming increasingly absorbed by their lives.","image_url":"https://m.media-amazon.com/images/M/MV5BYjM1N2Q0YWEtN2E5MC00NDM3LTk2NTEtMTc1NTk5OTA5ZGIzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0405094/"},{"rank":64,"imdb_id":"tt0043014","title":"Sunset Blvd.","rating":8.4,"votes":262073,"genre":["Drama","Film-Noir"],"duration_min":110,"content_rating":"Approved","description":"A screenwriter develops a dangerous relationship with a faded film star determined to make a triumphant return.","image_url":"https://m.media-amazon.com/images/M/MV5BMTU0NTkyNzYwMF5BMl5BanBnXkFtZTgwMDU0NDk5MTI@._V1_.jpg","url":"https://www.imdb.com/title/tt0043014/"},{"rank":65,"imdb_id":"tt0051201","title":"Witness for the Prosecution","rating":8.4,"votes":162867,"genre":["Crime","Drama","Mystery"],"duration_min":116,"content_rating":"Approved","description":"A veteran British barrister must defend his client in a murder trial that has surprise after surprise.","image_url":"https://m.media-amazon.com/images/M/MV5BNjRhNTQzMzQtMWViMi00ODQ1LTg0MTEtYWE4ZWZlYjM4YjJhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0051201/"},{"rank":66,"imdb_id":"tt0050825","title":"Paths of Glory","rating":8.4,"votes":240092,"genre":["Drama","War"],"duration_min":88,"content_rating":"Approved","description":"A colonel defends three of his soldiers in a court-martial after they abandon a suicidal attack.","image_url":"https://m.media-amazon.com/images/M/MV5BNmQ2NmI2ODYtMDQzNS00NzQyLTkzZjgtZmZlYTQ5MTc1OWU3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0050825/"},{"rank":67,"imdb_id":"tt0081505","title":"The Shining","rating":8.4,"votes":1231494,"genre":["Drama","Horror"],"duration_min":146,"content_rating":"R","description":"A family heads to an isolated hotel for the winter, where a sinister presence influences the father into violence. At the same time, his psychic son sees horrifying forebodings from both the past and the future.","image_url":"https://m.media-amazon.com/images/M/MV5BNmM5ZThhY2ItOGRjOS00NzZiLWEwYTItNDgyMjFkOTgxMmRiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0081505/"},{"rank":68,"imdb_id":"tt0032553","title":"The Great Dictator","rating":8.4,"votes":258903,"genre":["Comedy","Drama","War"],"duration_min":125,"content_rating":"G","description":"Dictator Adenoid Hynkel tries to expand his empire while a poor Jewish barber tries to avoid persecution from Hynkel&apos;s regime.","image_url":"https://m.media-amazon.com/images/M/MV5BMjc4ZjEwNDUtMjlmZS00NzQ4LTg2N2MtMGI3ZjMyMmM3ZDM2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0032553/"},{"rank":69,"imdb_id":"tt0361748","title":"Inglourious Basterds","rating":8.4,"votes":1795319,"genre":["Drama","War"],"duration_min":153,"content_rating":"R","description":"In Nazi-occupied France during World War II, a plan to assassinate Nazi leaders by a group of Jewish U.S. soldiers coincides with a theatre owner&apos;s vengeful plans for the same.","image_url":"https://m.media-amazon.com/images/M/MV5BODZhMWJlNjYtNDExNC00MTIzLTllM2ItOGQ2NGVjNDQ3MzkzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0361748/"},{"rank":70,"imdb_id":"tt0090605","title":"Aliens","rating":8.4,"votes":842479,"genre":["Action","Adventure","Horror"],"duration_min":137,"content_rating":"R","description":"Decades after surviving the Nostromo incident, Ellen Ripley is sent out to re-establish contact with a terraforming colony but finds herself battling the Alien Queen and her offspring.","image_url":"https://m.media-amazon.com/images/M/MV5BZjIyNGJhYzYtN2I1My00OTVhLWEyMzItZTVjNDMzOTVkYWViXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0090605/"},{"rank":71,"imdb_id":"tt23849204","title":"12th Fail","rating":8.7,"votes":173767,"genre":["Biography","Drama"],"duration_min":147,"content_rating":NaN,"description":"The real-life story of IPS Officer Manoj Kumar Sharma and IRS Officer Shraddha Joshi.","image_url":"https://m.media-amazon.com/images/M/MV5BNTE3OTIxZDYtNjA0NC00N2YxLTg1NGQtOTYxNmZkMDkwOWNjXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt23849204/"},{"rank":72,"imdb_id":"tt0057565","title":"Tengoku to jigoku","rating":8.4,"votes":72355,"genre":["Crime","Drama","Mystery"],"duration_min":143,"content_rating":"Not Rated","description":"An executive of a Yokohama shoe company becomes a victim of extortion when his chauffeur&apos;s son is kidnapped by mistake and held for ransom.","image_url":"https://m.media-amazon.com/images/M/MV5BOTFmOTNjYjUtMDA2MC00ZTJiLThiYzktNDdjNzQwMjNkN2NmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0057565/"},{"rank":73,"imdb_id":"tt4154796","title":"Avengers: Endgame","rating":8.4,"votes":1457438,"genre":["Action","Adventure","Sci-Fi"],"duration_min":181,"content_rating":"PG-13","description":"After the devastating events of Avengers: Infinity War (2018), the universe is in ruins. With the help of remaining allies, the Avengers assemble once more in order to reverse Thanos&apos; actions and restore balance to the universe.","image_url":"https://m.media-amazon.com/images/M/MV5BMTc5MDE2ODcwNV5BMl5BanBnXkFtZTgwMzI2NzQ2NzM@._V1_.jpg","url":"https://www.imdb.com/title/tt4154796/"},{"rank":74,"imdb_id":"tt0119217","title":"Good Will Hunting","rating":8.4,"votes":1225054,"genre":["Drama","Romance"],"duration_min":126,"content_rating":"R","description":"A therapist counsels Will Hunting, a janitor with a genius IQ.","image_url":"https://m.media-amazon.com/images/M/MV5BNDdjZGQ5YzEtNTc2My00Mjc0LWFlMTctYzkwMzZlNzdiZWYzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0119217/"},{"rank":75,"imdb_id":"tt1345836","title":"The Dark Knight Rises","rating":8.4,"votes":2003891,"genre":["Crime","Thriller"],"duration_min":164,"content_rating":"PG-13","description":"Bane, an imposing terrorist, attacks Gotham City and disrupts its eight-year-long period of peace. This forces Bruce Wayne to come out of hiding and don the cape and cowl of Batman again.","image_url":"https://m.media-amazon.com/images/M/MV5BMTk4ODQzNDY3Ml5BMl5BanBnXkFtZTcwODA0NTM4Nw@@._V1_.jpg","url":"https://www.imdb.com/title/tt1345836/"},{"rank":76,"imdb_id":"tt2380307","title":"Coco","rating":8.4,"votes":714223,"genre":["Animation","Adventure","Drama"],"duration_min":105,"content_rating":"PG","description":"Aspiring musician Miguel, confronted with his family&apos;s ancestral ban on music, enters the Land of the Dead to find his great-great-grandfather, a legendary singer.","image_url":"https://m.media-amazon.com/images/M/MV5BMDIyM2E2NTAtMzlhNy00ZGUxLWI1NjgtZDY5MzhiMDc5NGU3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt2380307/"},{"rank":77,"imdb_id":"tt0114709","title":"Toy Story","rating":8.3,"votes":1183929,"genre":["Animation","Adventure","Comedy"],"duration_min":81,"content_rating":"G","description":"A cowboy doll is profoundly jealous when a new spaceman action figure supplants him as the top toy in a boy&apos;s bedroom. When circumstances separate them from their owner, the duo have to put aside their differences to return to him.","image_url":"https://m.media-amazon.com/images/M/MV5BZTA3OWVjOWItNjE1NS00NzZiLWE1MjgtZDZhMWI1ZTlkNzYwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0114709/"},{"rank":78,"imdb_id":"tt0086879","title":"Amadeus","rating":8.4,"votes":469947,"genre":["Biography","Drama","Music"],"duration_min":160,"content_rating":"PG","description":"In 18th-century Vienna, court composer Antonio Salieri becomes awed and consumed by envy when the gifted, irreverent Wolfgang Amadeus Mozart bursts onto the imperial music scene.","image_url":"https://m.media-amazon.com/images/M/MV5BMzc2MjM0NTMtOGY4NC00NzY1LWE2ODUtZjMzY2RhNGNkZDAyXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0086879/"},{"rank":79,"imdb_id":"tt5311514","title":"Kimi no na wa.","rating":8.4,"votes":397043,"genre":["Animation","Drama","Fantasy"],"duration_min":106,"content_rating":NaN,"description":"Two teenagers, a city boy in Tokyo and a girl in rural Japan, mysteriously begin swapping bodies, forging a connection that sends them searching for one another.","image_url":"https://m.media-amazon.com/images/M/MV5BMjI1ODZkYTgtYTY3Yy00ZTJkLWFkOTgtZDUyYWM4MzQwNjk0XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt5311514/"},{"rank":80,"imdb_id":"tt0082096","title":"Das Boot","rating":8.3,"votes":288723,"genre":["Drama","War"],"duration_min":149,"content_rating":NaN,"description":"During World War II, a German U-boat crew embarks on a perilous Atlantic patrol, confronting enemy attacks, isolation, and the crushing strain of life underwater.","image_url":"https://m.media-amazon.com/images/M/MV5BNGU0MWZlMTUtM2Y3Ny00NGNmLWE5NmEtN2YxOWQzMGM3ZWYzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0082096/"},{"rank":81,"imdb_id":"tt0112573","title":"Braveheart","rating":8.3,"votes":1164783,"genre":["Drama","War"],"duration_min":178,"content_rating":"R","description":"Scottish warrior William Wallace leads his countrymen in a rebellion to free his homeland from the tyranny of King Edward I of England.","image_url":"https://m.media-amazon.com/images/M/MV5BNGMxZDBhNGQtYTZlNi00N2UzLWI4NDEtNmUzNWM2NTdmZDA0XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0112573/"},{"rank":82,"imdb_id":"tt0119698","title":"Mononoke-hime","rating":8.3,"votes":485732,"genre":["Animation","Adventure","Fantasy"],"duration_min":133,"content_rating":"PG-13","description":"After a deadly curse forces him from home, young warrior Ashitaka journeys west and is drawn into a conflict between ancient forest spirits, an iron town, and a wolf-raised girl.","image_url":"https://m.media-amazon.com/images/M/MV5BZTcyN2Y0MDYtMGI1NC00MWQ1LWFhZGMtN2U4NTcxZGYyNjljXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0119698/"},{"rank":83,"imdb_id":"tt0364569","title":"Oldeuboi","rating":8.3,"votes":723578,"genre":["Action","Drama","Mystery"],"duration_min":120,"content_rating":"R","description":"After being kidnapped and imprisoned for fifteen years, Oh Dae-Su is released, only to find that he must track down his captor in five days.","image_url":"https://m.media-amazon.com/images/M/MV5BMTAwNzNjYWItZmI0Ni00ZTcyLWIwNWMtZjlmNGMxZTEyYTJmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0364569/"},{"rank":84,"imdb_id":"tt1187043","title":"3 Idiots","rating":8.4,"votes":484954,"genre":["Comedy","Drama"],"duration_min":170,"content_rating":"PG-13","description":"Two friends search for a brilliant, free-spirited classmate whose unconventional approach to engineering school changed their lives and challenged a rigid education system.","image_url":"https://m.media-amazon.com/images/M/MV5BNzc4ZWQ3NmYtODE0Ny00YTQ4LTlkZWItNTBkMGQ0MmUwMmJlXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt1187043/"},{"rank":85,"imdb_id":"tt0057012","title":"Dr. Strangelove or: How I Learned to Stop Worrying and Love the Bomb","rating":8.3,"votes":551712,"genre":["Comedy","War"],"duration_min":95,"content_rating":"PG","description":"When a rogue U.S. general orders an unauthorized nuclear attack on the Soviet Union, leaders in the War Room race to prevent global catastrophe.","image_url":"https://m.media-amazon.com/images/M/MV5BMjFjYzBlOTktMTI2OS00ZWVhLTgxMDUtNzAwODY2NmI3YTAzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0057012/"},{"rank":86,"imdb_id":"tt0169547","title":"American Beauty","rating":8.3,"votes":1281856,"genre":["Drama"],"duration_min":122,"content_rating":"R","description":"A sexually frustrated suburban father has a mid-life crisis after becoming infatuated with his daughter&apos;s best friend.","image_url":"https://m.media-amazon.com/images/M/MV5BMDI1MDE0OTMtMmI2MS00Yjc2LTg2MTItMWExYTg5NzA1OGUzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0169547/"},{"rank":87,"imdb_id":"tt8267604","title":"Capharnaüm","rating":8.4,"votes":125229,"genre":["Drama"],"duration_min":126,"content_rating":"R","description":"While serving a five-year sentence for a violent crime, a 12-year-old boy sues his parents for neglect.","image_url":"https://m.media-amazon.com/images/M/MV5BYzEyMzQ1OTktZTljZi00OWQzLWE2ZmUtZjQyNzBjYjE1NTc0XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt8267604/"},{"rank":88,"imdb_id":"tt0045152","title":"Singin&apos; in the Rain","rating":8.3,"votes":283730,"genre":["Comedy","Musical","Romance"],"duration_min":103,"content_rating":"G","description":"When Hollywood&apos;s silent era gives way to talkies, a dashing screen idol and a gifted newcomer navigate romance, rivalry, and the comic chaos of reinventing the movies.","image_url":"https://m.media-amazon.com/images/M/MV5BMGQzZDFjZWUtZDU4ZS00ZjM3LTgyYmItYjA3YmIwYzRkZWY3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0045152/"},{"rank":89,"imdb_id":"tt0087843","title":"C&apos;era una volta in America","rating":8.3,"votes":409357,"genre":["Crime","Drama"],"duration_min":229,"content_rating":"R","description":"A former New York gangster returns after decades in exile, confronting the friendships, dreams, and regrets that shaped his rise from street kid to Prohibition-era mobster.","image_url":"https://m.media-amazon.com/images/M/MV5BMDQ0ZTg2OGUtZjMyOC00M2M5LThkMmItZmM2MmUzMmIxMWJhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0087843/"},{"rank":90,"imdb_id":"tt7286456","title":"Joker","rating":8.3,"votes":1703796,"genre":["Drama"],"duration_min":122,"content_rating":"R","description":"Arthur Fleck, a party clown and a failed stand-up comedian, leads an impoverished life with his ailing mother. However, when society shuns him and brands him as a freak, he decides to embrace the life of chaos in Gotham City.","image_url":"https://m.media-amazon.com/images/M/MV5BNzY3OWQ5NDktNWQ2OC00ZjdlLThkMmItMDhhNDk3NTFiZGU4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt7286456/"},{"rank":91,"imdb_id":"tt0435761","title":"Toy Story 3","rating":8.3,"votes":978660,"genre":["Animation","Adventure","Comedy"],"duration_min":103,"content_rating":"G","description":"As Andy prepares to leave for college, Woody, Buzz and the gang face an uncertain future when a mix-up sends them to a daycare center full of new toys.","image_url":"https://m.media-amazon.com/images/M/MV5BMTgxOTY4Mjc0MF5BMl5BanBnXkFtZTcwNTA4MDQyMw@@._V1_.jpg","url":"https://www.imdb.com/title/tt0435761/"},{"rank":92,"imdb_id":"tt0086190","title":"Star Wars: Episode VI - Return of the Jedi","rating":8.3,"votes":1214450,"genre":["Action","Adventure","Fantasy"],"duration_min":131,"content_rating":"PG","description":"After rescuing Han Solo from Jabba the Hutt, the Rebel Alliance attempts to destroy the second Death Star while Luke struggles to help Darth Vader back from the dark side.","image_url":"https://m.media-amazon.com/images/M/MV5BNWEwOTI0MmUtMGNmNy00ODViLTlkZDQtZTg1YmQ3MDgyNTUzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0086190/"},{"rank":93,"imdb_id":"tt0091251","title":"Idi i smotri","rating":8.3,"votes":124310,"genre":["Drama","Thriller","War"],"duration_min":142,"content_rating":"Not Rated","description":"After finding a rifle, a Belarusian teenager joins Soviet partisans in World War II and is swept into the harrowing realities of Nazi occupation.","image_url":"https://m.media-amazon.com/images/M/MV5BNDlkZmVkZDAtZGFmMS00OWIzLWJkY2YtNWE5NjNhNjhiZGE3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0091251/"},{"rank":94,"imdb_id":"tt0180093","title":"Requiem for a Dream","rating":8.3,"votes":977382,"genre":["Drama"],"duration_min":102,"content_rating":"NC-17","description":"Four Coney Island dreamers chase love, fame, and escape, but addiction and obsession begin to distort their hopes for a better life.","image_url":"https://m.media-amazon.com/images/M/MV5BN2ZlMjIzZjctYzA2My00ZWYyLWI4ZjctMGI2NWYyNzFiZjAwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0180093/"},{"rank":95,"imdb_id":"tt0044741","title":"Ikiru","rating":8.3,"votes":102863,"genre":["Drama"],"duration_min":143,"content_rating":"Not Rated","description":"An aging Tokyo bureaucrat, shaken by a grave diagnosis, breaks from his hollow routine and searches for meaning, connection, and one worthwhile act.","image_url":"https://m.media-amazon.com/images/M/MV5BMmZiNzExNmUtODU5YS00MDE1LWI0YTItMzVmNjM1ZTQ5NGVhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0044741/"},{"rank":96,"imdb_id":"tt2106476","title":"Jagten","rating":8.3,"votes":412434,"genre":["Drama"],"duration_min":115,"content_rating":"R","description":"A teacher lives a lonely life, all the while struggling over his son&apos;s custody. His life slowly gets better as he finds love and receives good news from his son, but his new luck is about to be brutally shattered by an innocent li...","image_url":"https://m.media-amazon.com/images/M/MV5BMTg2NDg3ODg4NF5BMl5BanBnXkFtZTcwNzk3NTc3Nw@@._V1_.jpg","url":"https://www.imdb.com/title/tt2106476/"},{"rank":97,"imdb_id":"tt1255953","title":"Incendies","rating":8.3,"votes":253795,"genre":["Drama","Mystery","War"],"duration_min":131,"content_rating":"R","description":"Twins journey to the Middle East to discover their family history and fulfill their mother&apos;s last wishes.","image_url":"https://m.media-amazon.com/images/M/MV5BYWFmMjdmNjctNzhhOC00ZmMzLTkwOGItMmVmZDU4MjE2MTYwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt1255953/"},{"rank":98,"imdb_id":"tt0338013","title":"Eternal Sunshine of the Spotless Mind","rating":8.3,"votes":1186375,"genre":["Drama","Romance","Sci-Fi"],"duration_min":108,"content_rating":"R","description":"When their relationship turns sour, a couple undergoes a medical procedure to have each other erased from their memories forever.","image_url":"https://m.media-amazon.com/images/M/MV5BMTY4NzcwODg3Nl5BMl5BanBnXkFtZTcwNTEwOTMyMw@@._V1_.jpg","url":"https://www.imdb.com/title/tt0338013/"},{"rank":99,"imdb_id":"tt0053604","title":"The Apartment","rating":8.3,"votes":220696,"genre":["Comedy","Drama","Romance"],"duration_min":125,"content_rating":"Approved","description":"A Manhattan insurance clerk tries to rise in his company by letting its executives use his apartment for trysts, but office politics and his own romantic hopes complicate matters.","image_url":"https://m.media-amazon.com/images/M/MV5BNDdhMzVhOWQtNDU2Mi00ZmZmLWJiZDMtY2QxMjhjY2Y1ZTI5XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0053604/"},{"rank":100,"imdb_id":"tt0056172","title":"Lawrence of Arabia","rating":8.3,"votes":342671,"genre":["Adventure","Biography","Drama"],"duration_min":227,"content_rating":"Approved","description":"The story of T.E. Lawrence, the English officer who successfully united and led the diverse, often warring, Arab tribes during World War I in order to fight the Turks.","image_url":"https://m.media-amazon.com/images/M/MV5BYjY0YTQ1OTAtYjEyNy00NTQ4LThlMTQtM2QwYTVhYWFhNjU5XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0056172/"},{"rank":101,"imdb_id":"tt0113277","title":"Heat","rating":8.3,"votes":809457,"genre":["Action","Crime","Drama"],"duration_min":170,"content_rating":"R","description":"A group of high-end professional thieves start to feel the heat from the LAPD when they unknowingly leave a verbal clue at their latest heist.","image_url":"https://m.media-amazon.com/images/M/MV5BMTkxYjU1OTMtYWViZC00ZjAzLWI3MDktZGQ2N2VmMjVjNDRlXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0113277/"},{"rank":102,"imdb_id":"tt0086250","title":"Scarface","rating":8.3,"votes":1022179,"genre":["Crime","Drama"],"duration_min":170,"content_rating":"R","description":"In the 1980s, a determined criminal-minded Cuban immigrant becomes the biggest drug smuggler in Miami, and is eventually undone by his own drug addiction.","image_url":"https://m.media-amazon.com/images/M/MV5BNDUzYjY0NmUtMDM4OS00Y2Q5LWJiODYtNTk0ZTk0YjZhMTg1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0086250/"},{"rank":103,"imdb_id":"tt0105236","title":"Reservoir Dogs","rating":8.2,"votes":1173551,"genre":["Crime","Thriller"],"duration_min":99,"content_rating":"R","description":"When a simple jewelry heist goes horribly wrong, the surviving criminals begin to suspect that one of them is a police informant.","image_url":"https://m.media-amazon.com/images/M/MV5BMmMzYjg4NDctYWY0Mi00OGViLWIzMTMtYWNlZGY5ZDJmYjk3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0105236/"},{"rank":104,"imdb_id":"tt0062622","title":"2001: A Space Odyssey","rating":8.3,"votes":786170,"genre":["Adventure","Sci-Fi"],"duration_min":149,"content_rating":"G","description":"When a mysterious artifact is uncovered on the Moon, a spacecraft manned by two humans and one supercomputer is sent to Jupiter to find its origins.","image_url":"https://m.media-amazon.com/images/M/MV5BNjU0NDFkMTQtZWY5OS00MmZhLTg3Y2QtZmJhMzMzMWYyYjc2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0062622/"},{"rank":105,"imdb_id":"tt1049413","title":"Up","rating":8.3,"votes":1242733,"genre":["Animation","Adventure","Comedy"],"duration_min":96,"content_rating":"PG","description":"A grumpy old man turns his house into an airship using balloons and flies off to South America with a young stowaway.","image_url":"https://m.media-amazon.com/images/M/MV5BNmI1ZTc5MWMtMDYyOS00ZDc2LTkzOTAtNjQ4NWIxNjYyNDgzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt1049413/"},{"rank":106,"imdb_id":"tt0036775","title":"Double Indemnity","rating":8.3,"votes":182081,"genre":["Crime","Drama","Film-Noir"],"duration_min":107,"content_rating":"Approved","description":"An insurance representative is seduced by a dissatisfied housewife into a scheme of insurance fraud and murder that arouses the suspicion of his colleague, a claims investigator.","image_url":"https://m.media-amazon.com/images/M/MV5BM2YwNjZlZDktNTlmNS00ODQwLWJmNmUtYmE1NTBhYjc1YTY5XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0036775/"},{"rank":107,"imdb_id":"tt0986264","title":"Taare Zameen Par","rating":8.3,"votes":233766,"genre":["Drama","Family"],"duration_min":162,"content_rating":"PG","description":"A young boy is thought to be nothing but a lazy troublemaker until the new art teacher has the patience and compassion to discover the real problem behind his struggles in school.","image_url":"https://m.media-amazon.com/images/M/MV5BZTI0ZGRiMDEtNGNjMS00MGU4LWI3OTktNzcxMDZmZTk3MTljXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0986264/"},{"rank":108,"imdb_id":"tt0053125","title":"North by Northwest","rating":8.3,"votes":369545,"genre":["Adventure","Drama","Mystery"],"duration_min":136,"content_rating":"Approved","description":"A New York City advertising executive goes on the run after being mistaken for a government agent by a group of foreign spies, and falls for a woman whose loyalties he begins to doubt.","image_url":"https://m.media-amazon.com/images/M/MV5BZWIzODI2OGItMzM0Ny00OGRmLTlkNmItMDQxMTFmMTk3YmQwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0053125/"},{"rank":109,"imdb_id":"tt0093058","title":"Full Metal Jacket","rating":8.2,"votes":853112,"genre":["Drama","War"],"duration_min":116,"content_rating":"R","description":"A pragmatic U.S. Marine observes the dehumanizing effects the Vietnam War has on his fellow recruits from their brutal boot camp training to the bloody street fighting in Hue.","image_url":"https://m.media-amazon.com/images/M/MV5BYWUzNzZkNzUtNDdiYy00Nzk5LTgxMmItNTk0MjRjNjdjNDA0XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0093058/"},{"rank":110,"imdb_id":"tt0022100","title":"M - Eine Stadt sucht einen Mörder","rating":8.3,"votes":183306,"genre":["Crime","Mystery","Thriller"],"duration_min":99,"content_rating":"Passed","description":"When the police in a German city are unable to catch a child-murderer, other criminals join in the manhunt.","image_url":"https://m.media-amazon.com/images/M/MV5BODA4ODk3OTEzMF5BMl5BanBnXkFtZTgwMTQ2ODMwMzE@._V1_.jpg","url":"https://www.imdb.com/title/tt0022100/"},{"rank":111,"imdb_id":"tt1832382","title":"Jodaeiye Nader az Simin","rating":8.3,"votes":278684,"genre":["Drama"],"duration_min":123,"content_rating":"PG-13","description":"A married couple have to decide whether to improve their daughter&apos;s life by moving abroad or to stay in Iran and look after a deteriorating parent with Alzheimer&apos;s disease.","image_url":"https://m.media-amazon.com/images/M/MV5BMDM0ZWRmMzctM2M5ZS00ZjU0LWIxN2MtNWNlNGY1ZDhjMDVhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt1832382/"},{"rank":112,"imdb_id":"tt0211915","title":"Le Fabuleux Destin d&apos;Amélie Poulain","rating":8.2,"votes":842409,"genre":["Comedy","Romance"],"duration_min":122,"content_rating":"R","description":"Despite being caught in her imaginative world, young waitress Amelie decides to help people find happiness. Her quest to spread joy leads her on a journey during which she finds true love.","image_url":"https://m.media-amazon.com/images/M/MV5BOTNmYzY0MWQtZGZmNy00Y2Y4LWFmMDQtMTZjYTdiYzEwZGQ2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0211915/"},{"rank":113,"imdb_id":"tt0052357","title":"Vertigo","rating":8.2,"votes":459694,"genre":["Mystery","Romance","Thriller"],"duration_min":128,"content_rating":"PG","description":"A former San Francisco police detective juggles wrestling with his personal demons and becoming obsessed with the hauntingly beautiful woman he has been hired to trail, who may be deeply disturbed.","image_url":"https://m.media-amazon.com/images/M/MV5BNzEyZTUxMWItMGVhYy00Y2NlLTljYTMtYzBmMzI1YmUyMDBkXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0052357/"},{"rank":114,"imdb_id":"tt0033467","title":"Citizen Kane","rating":8.2,"votes":493973,"genre":["Drama","Mystery"],"duration_min":119,"content_rating":"PG","description":"Following the death of publishing tycoon Charles Foster Kane, reporters scramble to uncover the meaning of his final utterance: &apos;Rosebud.&apos;","image_url":"https://m.media-amazon.com/images/M/MV5BYjk1ZDJlMmUtOWQ0Zi00MDM5LTk1OGYtODczNjFmMGYwZGVkXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0033467/"},{"rank":115,"imdb_id":"tt0095016","title":"Die Hard","rating":8.2,"votes":1032572,"genre":["Action","Thriller"],"duration_min":132,"content_rating":"R","description":"A New York City cop tries to save his wife and several others taken hostage by terrorists during a Christmas party in a Los Angeles skyscraper.","image_url":"https://m.media-amazon.com/images/M/MV5BMGNlYmM1NmQtYWExMS00NmRjLTg5ZmEtMmYyYzJkMzljYWMxXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0095016/"},{"rank":116,"imdb_id":"tt0056592","title":"To Kill a Mockingbird","rating":8.2,"votes":351462,"genre":["Crime","Drama"],"duration_min":129,"content_rating":"Approved","description":"A widowed lawyer in Depression-era Alabama defends a black man against a false rape charge while teaching his young children about the sad reality of prejudice.","image_url":"https://m.media-amazon.com/images/M/MV5BZTlkYWU4MGEtZmQyYi00OWEzLTgzY2EtYzVjOTEzYzAyNTk1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0056592/"},{"rank":117,"imdb_id":"tt0097576","title":"Indiana Jones and the Last Crusade","rating":8.2,"votes":865708,"genre":["Adventure"],"duration_min":127,"content_rating":"PG-13","description":"In 1938, after his father goes missing while pursuing the Holy Grail, Indiana Jones finds himself up against the Nazis again to stop them from obtaining its powers.","image_url":"https://m.media-amazon.com/images/M/MV5BNGIxNzQ0YzYtMjNmYi00YjBlLWFjNzEtNGE3ZGFmYTczM2MwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0097576/"},{"rank":118,"imdb_id":"tt0070735","title":"The Sting","rating":8.2,"votes":303174,"genre":["Comedy","Crime","Drama"],"duration_min":129,"content_rating":"PG","description":"Two grifters team up to pull off the ultimate con.","image_url":"https://m.media-amazon.com/images/M/MV5BZGI4OTk4MDMtYmQ1Ni00YTUzLTkyYTktZGUwMjMyN2M4NjQ5XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0070735/"},{"rank":119,"imdb_id":"tt31514146","title":"I Swear","rating":8.4,"votes":52013,"genre":["Biography","Drama"],"duration_min":120,"content_rating":"R","description":"John Davidson: diagnosed with Tourette&apos;s syndrome at a young age which alienated him from his peers, he struggled with a condition few people had witnessed.","image_url":"https://m.media-amazon.com/images/M/MV5BNWQxYTMyZTktZDg5Yi00Y2YwLWI4YzQtMjkyYmYxNmFjYThmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt31514146/"},{"rank":120,"imdb_id":"tt33175825","title":"Shingeki no Kyojin: The Last Attack","rating":9.0,"votes":31918,"genre":["Animation","Action","Adventure"],"duration_min":145,"content_rating":NaN,"description":"The fate of the world hangs in the balance as Eren unleashes the ultimate power of the Titans. With a burning determination to eliminate all who threaten Eldia, he leads an unstoppable army of Colossal Titans towards Marley.","image_url":"https://m.media-amazon.com/images/M/MV5BNzVjOWEwYjEtNDJhOC00YjUyLThjMWItMDQwZGY1ODM4YzI3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt33175825/"},{"rank":121,"imdb_id":"tt0066921","title":"A Clockwork Orange","rating":8.2,"votes":938638,"genre":["Crime","Sci-Fi"],"duration_min":136,"content_rating":"R","description":"Alex DeLarge and his droogs barbarize a decaying near-future.","image_url":"https://m.media-amazon.com/images/M/MV5BMTY3MjM1Mzc4N15BMl5BanBnXkFtZTgwODM0NzAxMDE@._V1_.jpg","url":"https://www.imdb.com/title/tt0066921/"},{"rank":122,"imdb_id":"tt0017136","title":"Metropolis","rating":8.2,"votes":201851,"genre":["Drama","Sci-Fi"],"duration_min":150,"content_rating":"Passed","description":"In a futuristic city sharply divided between the working class and the city planners, the son of the city&apos;s mastermind falls in love with a working-class prophet who predicts the coming of a savior to mediate their differences.","image_url":"https://m.media-amazon.com/images/M/MV5BMjhjMGYyMjAtMzJkYy00NzhlLWIwY2MtMWQ2ODIxZDUyOGYyXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0017136/"},{"rank":123,"imdb_id":"tt8579674","title":"1917","rating":8.2,"votes":776126,"genre":["Drama","War"],"duration_min":119,"content_rating":"R","description":"April 6th, 1917. As an infantry battalion assembles to wage war deep in enemy territory, two soldiers are assigned to race against time and deliver a message that will stop 1,600 men from walking straight into a deadly trap.","image_url":"https://m.media-amazon.com/images/M/MV5BYzkxZjg2NDQtMGVjMy00NWZkLTk0ZDEtZWE3NDYwYjAyMTg1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt8579674/"},{"rank":124,"imdb_id":"tt0208092","title":"Snatch","rating":8.2,"votes":979091,"genre":["Comedy","Crime"],"duration_min":102,"content_rating":"R","description":"Unscrupulous boxing promoters, violent bookmakers, a Russian gangster, incompetent amateur robbers and supposedly Jewish jewelers fight to track down a priceless stolen diamond.","image_url":"https://m.media-amazon.com/images/M/MV5BYzk5NjJkMTQtN2IyNC00YWM5LTlhZmMtNGI3MWNhMTU1YTc4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0208092/"},{"rank":125,"imdb_id":"tt0993846","title":"The Wolf of Wall Street","rating":8.2,"votes":1800505,"genre":["Biography","Comedy","Crime"],"duration_min":180,"content_rating":"R","description":"Based on the true story of Jordan Belfort, from his rise to a wealthy stock-broker living the high life to his fall involving crime, corruption and the federal government.","image_url":"https://m.media-amazon.com/images/M/MV5BMjIxMjgxNTk0MF5BMl5BanBnXkFtZTgwNjIyOTg2MDE@._V1_.jpg","url":"https://www.imdb.com/title/tt0993846/"},{"rank":126,"imdb_id":"tt0120382","title":"The Truman Show","rating":8.2,"votes":1384101,"genre":["Comedy","Drama"],"duration_min":103,"content_rating":"PG","description":"An insurance salesman begins to suspect that his whole life is actually some sort of reality TV show.","image_url":"https://m.media-amazon.com/images/M/MV5BNzA3ZjZlNzYtMTdjMy00NjMzLTk5ZGYtMTkyYzNiOGM1YmM3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0120382/"},{"rank":127,"imdb_id":"tt0363163","title":"Der Untergang","rating":8.2,"votes":401527,"genre":["Biography","Drama","History"],"duration_min":156,"content_rating":"R","description":"Traudl Junge, the final secretary for Adolf Hitler, tells of the Nazi dictator&apos;s final days in his Berlin bunker at the end of WWII.","image_url":"https://m.media-amazon.com/images/M/MV5BMTU0NTU5NTAyMl5BMl5BanBnXkFtZTYwNzYwMDg2._V1_.jpg","url":"https://www.imdb.com/title/tt0363163/"},{"rank":128,"imdb_id":"tt0119488","title":"L.A. Confidential","rating":8.2,"votes":660053,"genre":["Crime","Drama","Mystery"],"duration_min":138,"content_rating":"R","description":"As corruption grows in 1950s Los Angeles, three policemen - one strait-laced, one brutal, and one sleazy - investigate a series of murders with their own brand of justice.","image_url":"https://m.media-amazon.com/images/M/MV5BODdiMjY1OGYtNDk0NC00NGQ1LWI4MDItOTJhMTM0YjE1YTAzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0119488/"},{"rank":129,"imdb_id":"tt5074352","title":"Dangal","rating":8.3,"votes":245117,"genre":["Action","Biography","Drama"],"duration_min":161,"content_rating":"Not Rated","description":"Mahavir Singh Phogat, a former wrestler, decides to fulfill his dream of winning a gold medal for his country by training his daughters for the Commonwealth Games despite the existing social stigmas.","image_url":"https://m.media-amazon.com/images/M/MV5BMTQ4MzQzMzM2Nl5BMl5BanBnXkFtZTgwMTQ1NzU3MDI@._V1_.jpg","url":"https://www.imdb.com/title/tt5074352/"},{"rank":130,"imdb_id":"tt1130884","title":"Shutter Island","rating":8.2,"votes":1659245,"genre":["Drama","Mystery","Thriller"],"duration_min":138,"content_rating":"R","description":"Two US marshals are sent to a mental institution on an inhospitable island in order to investigate the disappearance of a patient.","image_url":"https://m.media-amazon.com/images/M/MV5BN2FjNWExYzEtY2YzOC00YjNlLTllMTQtNmIwM2Q1YzBhOWM1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt1130884/"},{"rank":131,"imdb_id":"tt6966692","title":"Green Book","rating":8.2,"votes":692534,"genre":["Biography","Comedy","Drama"],"duration_min":130,"content_rating":"PG-13","description":"A working-class Italian-American bouncer becomes the driver for an African-American classical pianist on a tour of venues through the 1960s American South.","image_url":"https://m.media-amazon.com/images/M/MV5BNDU5YTNmMmItN2QxNy00OGQ0LTg5MTctNzFmYjEzZjcwN2UwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt6966692/"},{"rank":132,"imdb_id":"tt0040522","title":"Ladri di biciclette","rating":8.2,"votes":192090,"genre":["Drama"],"duration_min":89,"content_rating":"Not Rated","description":"In post-war Italy, a working-class man&apos;s bicycle is stolen, endangering his efforts to find work. He and his son set out to find it.","image_url":"https://m.media-amazon.com/images/M/MV5BMjIzMzAyMzg1Nl5BMl5BanBnXkFtZTgwMzMyNzk0MTE@._V1_.jpg","url":"https://www.imdb.com/title/tt0040522/"},{"rank":133,"imdb_id":"tt15398776","title":"Oppenheimer","rating":8.2,"votes":1059169,"genre":["Biography","Drama","History"],"duration_min":180,"content_rating":"R","description":"A dramatization of the life story of J. Robert Oppenheimer, the physicist who had a large hand in the development of the atomic bombs that brought an end to World War II.","image_url":"https://m.media-amazon.com/images/M/MV5BN2JkMDc5MGQtZjg3YS00NmFiLWIyZmQtZTJmNTM5MjVmYTQ4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt15398776/"},{"rank":134,"imdb_id":"tt0055031","title":"Judgment at Nuremberg","rating":8.3,"votes":97324,"genre":["Drama","History","War"],"duration_min":179,"content_rating":"Approved","description":"Fictionalized depiction of the 1947 Judges&apos; Trial, the third of 12 trials of Nazi war criminals conducted by the American occupying forces in Nuremberg, Germany, in which former judges of Nazi Germany were tried for their actions.","image_url":"https://m.media-amazon.com/images/M/MV5BNDc2ODQ5NTE2MV5BMl5BanBnXkFtZTcwODExMjUyNA@@._V1_.jpg","url":"https://www.imdb.com/title/tt0055031/"},{"rank":135,"imdb_id":"tt0372784","title":"Batman Begins","rating":8.2,"votes":1722922,"genre":["Crime"],"duration_min":140,"content_rating":"PG-13","description":"After witnessing his parents&apos; death, billionaire Bruce Wayne learns the art of fighting to confront injustice. When he returns to Gotham as Batman, he must stop a secret society that intends to destroy the city.","image_url":"https://m.media-amazon.com/images/M/MV5BMzA2NDQzZDEtNDU5Ni00YTlkLTg2OWEtYmQwM2Y1YTBjMjFjXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0372784/"},{"rank":136,"imdb_id":"tt0107290","title":"Jurassic Park","rating":8.2,"votes":1184244,"genre":["Adventure","Sci-Fi"],"duration_min":127,"content_rating":"PG-13","description":"An industrialist invites some experts to visit his theme park of cloned dinosaurs. After a power failure, the creatures run loose, putting everyone&apos;s lives, including his grandchildren&apos;s, in danger.","image_url":"https://m.media-amazon.com/images/M/MV5BMjM2MDgxMDg0Nl5BMl5BanBnXkFtZTgwNTM2OTM5NDE@._V1_.jpg","url":"https://www.imdb.com/title/tt0107290/"},{"rank":137,"imdb_id":"tt0059578","title":"Per qualche dollaro in più","rating":8.2,"votes":301201,"genre":["Drama","Western"],"duration_min":132,"content_rating":"R","description":"Two bounty killers with similar intentions but different motivations team up to take down a psychotic Mexican outlaw before he and his gang can carry out an audacious bank robbery.","image_url":"https://m.media-amazon.com/images/M/MV5BNTRmOTcyYmYtMTIwNi00ZGYyLTk4YjYtZGJlZTgwZGY0NGQyXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0059578/"},{"rank":138,"imdb_id":"tt8503618","title":"Hamilton","rating":8.3,"votes":140595,"genre":["Biography","Drama","History"],"duration_min":160,"content_rating":"PG-13","description":"The real life of one of America&apos;s foremost founding fathers and first Secretary of the Treasury, Alexander Hamilton. Captured live on Broadway from the Richard Rodgers Theater with the original Broadway cast.","image_url":"https://m.media-amazon.com/images/M/MV5BYTc3MWIyMzAtMTZmNC00YmNjLWIyZTgtMmU4NjZkYzZkOThkXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt8503618/"},{"rank":139,"imdb_id":"tt0075314","title":"Taxi Driver","rating":8.2,"votes":1031256,"genre":["Crime","Drama"],"duration_min":114,"content_rating":"R","description":"A mentally unstable veteran works as a nighttime taxi driver in New York City, where the perceived decadence and sleaze fuels his urge for violent action.","image_url":"https://m.media-amazon.com/images/M/MV5BZDNhMGYwM2UtMTdlZS00MGQ1LWI2YzAtODY5YWI1MjYyNzRmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0075314/"},{"rank":140,"imdb_id":"tt0053291","title":"Some Like It Hot","rating":8.2,"votes":305392,"genre":["Comedy","Music","Romance"],"duration_min":121,"content_rating":"Approved","description":"After two male musicians witness a mob hit, they flee the state in an all-female band disguised as women, but further complications set in.","image_url":"https://m.media-amazon.com/images/M/MV5BZTllZDYyNjEtY2RmMS00NmJhLWI4ODAtMTQ0NWFiZTJhZjA0XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0053291/"},{"rank":141,"imdb_id":"tt0469494","title":"There Will Be Blood","rating":8.2,"votes":712257,"genre":["Drama"],"duration_min":158,"content_rating":"R","description":"A story of family, religion, hatred, oil and madness, focusing on a turn-of-the-century prospector in the early days of the business.","image_url":"https://m.media-amazon.com/images/M/MV5BMjAxODQ4MDU5NV5BMl5BanBnXkFtZTcwMDU4MjU1MQ@@._V1_.jpg","url":"https://www.imdb.com/title/tt0469494/"},{"rank":142,"imdb_id":"tt12042730","title":"Project Hail Mary","rating":8.2,"votes":398008,"genre":["Adventure","Comedy","Drama"],"duration_min":156,"content_rating":"PG-13","description":"A science teacher wakes up alone on a spaceship. As his memory returns, he uncovers a mission to stop a mysterious substance killing Earth&apos;s sun, and realizes that an unexpected friendship may be the key.","image_url":"https://m.media-amazon.com/images/M/MV5BNTkwNzJiYTctNzI3NC00NjE1LTlhYjktY2Q5MTdmMWFmNzcxXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt12042730/"},{"rank":143,"imdb_id":"tt10272386","title":"The Father","rating":8.2,"votes":246730,"genre":["Drama","Mystery"],"duration_min":97,"content_rating":"PG-13","description":"A man refuses all assistance from his daughter as he ages. When he tries to understand what is happening around him, he begins to doubt his loved ones, his own mind and even the fabric of his reality.","image_url":"https://m.media-amazon.com/images/M/MV5BYzUxMDAyMDAtNzIyZi00OGQ1LTllMjEtYzRjOThkZTUxNTliXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt10272386/"},{"rank":144,"imdb_id":"tt0012349","title":"The Kid","rating":8.2,"votes":146121,"genre":["Comedy","Drama","Family"],"duration_min":68,"content_rating":"Passed","description":"The Tramp cares for an abandoned child, but events put their relationship in jeopardy.","image_url":"https://m.media-amazon.com/images/M/MV5BNjkxMzY1NTQtN2YwOS00NmIwLTlkNTMtMjNkMzk1ZTk3ZDU2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0012349/"},{"rank":145,"imdb_id":"tt0042192","title":"All About Eve","rating":8.2,"votes":149732,"genre":["Drama"],"duration_min":138,"content_rating":"Approved","description":"A seemingly timid but secretly ruthless ingénue insinuates herself into the lives of an aging Broadway star and her circle of theater friends.","image_url":"https://m.media-amazon.com/images/M/MV5BMTY2MTAzODI5NV5BMl5BanBnXkFtZTgwMjM4NzQ0MjE@._V1_.jpg","url":"https://www.imdb.com/title/tt0042192/"},{"rank":146,"imdb_id":"tt0167404","title":"The Sixth Sense","rating":8.2,"votes":1149495,"genre":["Drama","Mystery","Thriller"],"duration_min":107,"content_rating":"PG-13","description":"After being shot by a resentful former patient whom he failed to help, a Philadelphia child psychologist seeks redemption by treating a young boy with a disturbing secret.","image_url":"https://m.media-amazon.com/images/M/MV5BZWQ2OTY0M2UtMTQxNC00MmIzLTllNDQtNDQ0MTQyYzI2M2ZiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0167404/"},{"rank":147,"imdb_id":"tt0089881","title":"Ran","rating":8.2,"votes":152865,"genre":["Action","Drama","War"],"duration_min":160,"content_rating":"R","description":"In Medieval Japan, an elderly warlord retires, handing over his empire to his three sons. However, he vastly underestimates how the new-found power will corrupt them and cause them to turn on each other...and him.","image_url":"https://m.media-amazon.com/images/M/MV5BZDk2NDY5YjktMjEyMC00OTJhLTkzM2EtY2Q4Y2RjYzc2Yjk4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0089881/"},{"rank":148,"imdb_id":"tt0112641","title":"Casino","rating":8.2,"votes":622530,"genre":["Crime","Drama"],"duration_min":178,"content_rating":"R","description":"In Las Vegas, two best friends--a casino executive and a Mafia enforcer--compete for a gambling empire and a fast-living, fast-loving socialite.","image_url":"https://m.media-amazon.com/images/M/MV5BMDRlZWZjZjYtYzY2NS00ZWVjLTkwYzAtZTA2ZDAzMGRiYmYwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0112641/"},{"rank":149,"imdb_id":"tt0084787","title":"The Thing","rating":8.2,"votes":528969,"genre":["Horror","Mystery","Sci-Fi"],"duration_min":109,"content_rating":"R","description":"A research team in Antarctica is hunted by a shape-shifting alien that assumes the appearance of its victims.","image_url":"https://m.media-amazon.com/images/M/MV5BYTA3NDU5MWEtNTk4Yy00ZDNkLThmZTQtMjU3ZGVhYzAyMzU4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0084787/"},{"rank":150,"imdb_id":"tt0477348","title":"No Country for Old Men","rating":8.2,"votes":1198313,"genre":["Crime","Drama","Thriller"],"duration_min":122,"content_rating":"R","description":"Violence and mayhem ensue after a hunter stumbles upon the aftermath of a drug deal gone wrong and over two million dollars in cash near the Rio Grande.","image_url":"https://m.media-amazon.com/images/M/MV5BMjA5Njk3MjM4OV5BMl5BanBnXkFtZTcwMTc5MTE1MQ@@._V1_.jpg","url":"https://www.imdb.com/title/tt0477348/"},{"rank":151,"imdb_id":"tt1392214","title":"Prisoners","rating":8.2,"votes":942917,"genre":["Crime","Drama","Mystery"],"duration_min":153,"content_rating":"R","description":"A desperate father takes the law into his own hands after police fail to find two kidnapped girls.","image_url":"https://m.media-amazon.com/images/M/MV5BMTg0NTIzMjQ1NV5BMl5BanBnXkFtZTcwNDc3MzM5OQ@@._V1_.jpg","url":"https://www.imdb.com/title/tt1392214/"},{"rank":152,"imdb_id":"tt1745960","title":"Top Gun: Maverick","rating":8.2,"votes":888929,"genre":["Action","Drama"],"duration_min":130,"content_rating":"PG-13","description":"The story involves Maverick confronting his past while training a group of younger Top Gun graduates, including the son of his deceased best friend, for a dangerous mission.","image_url":"https://m.media-amazon.com/images/M/MV5BMDBkZDNjMWEtOTdmMi00NmExLTg5MmMtNTFlYTJlNWY5YTdmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt1745960/"},{"rank":153,"imdb_id":"tt0266697","title":"Kill Bill: Vol. 1","rating":8.2,"votes":1313152,"genre":["Action","Crime","Thriller"],"duration_min":111,"content_rating":"R","description":"After waking from a four-year coma, a former assassin wreaks vengeance on the team of assassins who betrayed her.","image_url":"https://m.media-amazon.com/images/M/MV5BZmMyYzJlZmYtY2I3NC00NjAyLTkyZWItZjdjZDI1YTYyYTEwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0266697/"},{"rank":154,"imdb_id":"tt0457430","title":"El laberinto del fauno","rating":8.2,"votes":748770,"genre":["Drama","Fantasy","War"],"duration_min":118,"content_rating":"R","description":"In 1944 Francoist Spain, an imaginative young girl meets a faun who tells her she&apos;s a princess and that she must prove her worthiness by completing three dangerous tasks.","image_url":"https://m.media-amazon.com/images/M/MV5BOTc1NTAxMWItMWFlNy00MmU2LTkwMTMtNzMwOTg5OTQ5YTFiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0457430/"},{"rank":155,"imdb_id":"tt0105695","title":"Unforgiven","rating":8.2,"votes":469512,"genre":["Drama","Western"],"duration_min":130,"content_rating":"R","description":"Retired Old West gunslinger Will Munny reluctantly takes on one last job to avenge an injustice with the help of his old partner and a young would-be gunman calling himself &quot;The Schofield Kid&quot;.","image_url":"https://m.media-amazon.com/images/M/MV5BNmZmMzM3YWMtZjg5Yi00M2MxLTg3ZGItNGU4YjQxNDAxM2Q4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0105695/"},{"rank":156,"imdb_id":"tt0268978","title":"A Beautiful Mind","rating":8.2,"votes":1056920,"genre":["Biography","Drama","Mystery"],"duration_min":135,"content_rating":"PG-13","description":"A mathematical genius, John Nash made an astonishing discovery early in his career and stood on the brink of international acclaim. But Nash soon found himself on a harrowing journey of self-discovery.","image_url":"https://m.media-amazon.com/images/M/MV5BYjgzNjFkMmItOGJhNi00NWM3LWJlYTUtNDExMGQ3ZTI3NjJkXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0268978/"},{"rank":157,"imdb_id":"tt0347149","title":"Hauru no ugoku shiro","rating":8.2,"votes":515755,"genre":["Animation","Adventure","Family"],"duration_min":119,"content_rating":"PG","description":"When an unconfident young woman is cursed with an old body by a spiteful witch, her only chance of breaking the spell lies with a self-indulgent yet insecure young wizard and his companions in his legged, walking castle.","image_url":"https://m.media-amazon.com/images/M/MV5BMTY1OTg0MjE3MV5BMl5BanBnXkFtZTcwNTUxMTkyMQ@@._V1_.jpg","url":"https://www.imdb.com/title/tt0347149/"},{"rank":158,"imdb_id":"tt0040897","title":"The Treasure of the Sierra Madre","rating":8.2,"votes":141846,"genre":["Adventure","Drama","Western"],"duration_min":126,"content_rating":"Approved","description":"Two down-on-their-luck Americans searching for work in 1920s Mexico convince an old prospector to help them mine for gold in the Sierra Madre Mountains.","image_url":"https://m.media-amazon.com/images/M/MV5BOWM1YjFmODEtMWNhMC00YmI1LWI0Y2EtYzg0YTBhZWI4ODE3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0040897/"},{"rank":159,"imdb_id":"tt0266543","title":"Finding Nemo","rating":8.2,"votes":1213873,"genre":["Animation","Adventure","Comedy"],"duration_min":100,"content_rating":"G","description":"After his son is captured in the Great Barrier Reef and taken to Sydney, a timid clownfish sets out on a journey to bring him home.","image_url":"https://m.media-amazon.com/images/M/MV5BMTc5NjExNTA5OV5BMl5BanBnXkFtZTYwMTQ0ODY2._V1_.jpg","url":"https://www.imdb.com/title/tt0266543/"},{"rank":160,"imdb_id":"tt4729430","title":"Klaus","rating":8.2,"votes":238877,"genre":["Animation","Adventure","Comedy"],"duration_min":96,"content_rating":"PG","description":"A simple act of kindness always sparks another, even in a frozen, faraway place. When Smeerensburg&apos;s new postman, Jesper, befriends toymaker Klaus, their gifts melt an age-old feud and deliver a sleigh full of holiday traditions.","image_url":"https://m.media-amazon.com/images/M/MV5BZDA4ODhlMzctNGRmYi00NmViLTkxZGYtZjRkNGQ5YzYwYWVlXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt4729430/"},{"rank":161,"imdb_id":"tt0055630","title":"Yôjinbô","rating":8.2,"votes":143646,"genre":["Action","Drama","Thriller"],"duration_min":110,"content_rating":"Not Rated","description":"A crafty ronin comes to a town divided by two criminal gangs and decides to play them against each other to free the town.","image_url":"https://m.media-amazon.com/images/M/MV5BYzFkODA1N2QtY2UyMC00NTMwLWEyNzctMmE3YjIzNzE1MzY4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0055630/"},{"rank":162,"imdb_id":"tt0080678","title":"The Elephant Man","rating":8.2,"votes":282233,"genre":["Biography","Drama"],"duration_min":124,"content_rating":"PG","description":"A Victorian surgeon rescues a heavily-disfigured and mistreated young man working as a sideshow freak, who gradually reveals his capacity for kindness, intelligence and sophistication.","image_url":"https://m.media-amazon.com/images/M/MV5BMGE3MDZhNmMtMmUxZS00MDJmLTgxYmQtOGU4ODU0Y2JmNDI1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0080678/"},{"rank":163,"imdb_id":"tt0057115","title":"The Great Escape","rating":8.2,"votes":278308,"genre":["Adventure","Drama","Thriller"],"duration_min":172,"content_rating":"Approved","description":"Allied officers in a German POW camp during World War II make a daring plan for a mass escape.","image_url":"https://m.media-amazon.com/images/M/MV5BMDRhNmJjMzEtMWU5MC00YmEyLTg3ZmYtNzYxZTI1ZGU4ZjI1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0057115/"},{"rank":164,"imdb_id":"tt32820897","title":"Gekijô-ban Kimetsu no Yaiba Mugen Jô-hen","rating":8.4,"votes":74760,"genre":["Animation","Action","Adventure"],"duration_min":155,"content_rating":"R","description":"The Demon Slayer Corps are drawn into the Infinity Castle, where Tanjiro and the Hashira face terrifying Upper Rank demons in a desperate fight as the final battle against Muzan Kibutsuji begins.","image_url":"https://m.media-amazon.com/images/M/MV5BOGQ3YWUzYjEtMTJiYy00ZjQ0LWI0YjktYjhiNGVhNGExYTM3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt32820897/"},{"rank":165,"imdb_id":"tt0071853","title":"Monty Python and the Holy Grail","rating":8.1,"votes":604490,"genre":["Adventure","Comedy","Fantasy"],"duration_min":91,"content_rating":"PG","description":"King Arthur and his Knights of the Round Table embark on a surreal, low-budget search for the Holy Grail, encountering many, very silly obstacles.","image_url":"https://m.media-amazon.com/images/M/MV5BYWY4YmUzZmUtMzQ0ZS00N2Y2LWJlODQtN2IwMDc1MWQwMmU3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0071853/"},{"rank":166,"imdb_id":"tt0046912","title":"Dial M for Murder","rating":8.1,"votes":205498,"genre":["Crime","Drama","Mystery"],"duration_min":105,"content_rating":"PG","description":"A London playboy plots the perfect murder of his rich, unfaithful wife.","image_url":"https://m.media-amazon.com/images/M/MV5BZmYzNDgzYjgtNmU3Ny00YzUxLWE3OWUtMjIxZmNkYTVhNDZmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0046912/"},{"rank":167,"imdb_id":"tt1305806","title":"El secreto de sus ojos","rating":8.2,"votes":243331,"genre":["Drama","Mystery","Romance"],"duration_min":129,"content_rating":"R","description":"A retired legal counselor writes a novel hoping to find closure for one of his past unresolved homicide cases and for his unreciprocated love with his superior--both of which still haunt him decades later.","image_url":"https://m.media-amazon.com/images/M/MV5BMTgwNTI3OTczOV5BMl5BanBnXkFtZTcwMTM3MTUyMw@@._V1_.jpg","url":"https://www.imdb.com/title/tt1305806/"},{"rank":168,"imdb_id":"tt0031381","title":"Gone with the Wind","rating":8.2,"votes":356538,"genre":["Drama","Romance","War"],"duration_min":238,"content_rating":"G","description":"A sheltered and manipulative Southern belle and a roguish profiteer face off in a turbulent romance as the society around them crumbles with the end of slavery and is rebuilt during the Civil War and Reconstruction periods.","image_url":"https://m.media-amazon.com/images/M/MV5BYmYxZTE3YzMtYmE2Yy00NmFlLTkzYTAtYTAzN2IzNDFkN2E0XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0031381/"},{"rank":169,"imdb_id":"tt0120735","title":"Lock, Stock and Two Smoking Barrels","rating":8.1,"votes":650592,"genre":["Comedy","Crime"],"duration_min":107,"content_rating":"R","description":"When four small-time criminals lose a rigged poker game against a London kingpin, he gives them one week to settle their enormous debt.","image_url":"https://m.media-amazon.com/images/M/MV5BMmY1M2M5ZmMtYzllZC00YzAxLTk4MjktZDJkNjA1MTUwMGQ4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0120735/"},{"rank":170,"imdb_id":"tt0071315","title":"Chinatown","rating":8.1,"votes":377481,"genre":["Drama","Mystery","Thriller"],"duration_min":130,"content_rating":"R","description":"A private detective hired to expose an adulterer in 1930s Los Angeles finds himself caught up in a web of deceit, corruption, and murder.","image_url":"https://m.media-amazon.com/images/M/MV5BNmRmZTE0NmUtZjhiZi00MzQ3LTk3ZjctN2Q3ODYzY2U3MDk3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0071315/"},{"rank":171,"imdb_id":"tt0346336","title":"La meglio gioventù","rating":8.4,"votes":28354,"genre":["Drama","Romance"],"duration_min":374,"content_rating":"R","description":"An Italian epic that follows the lives of two brothers from the 1960s to the 2000s.","image_url":"https://m.media-amazon.com/images/M/MV5BYzcxMTE2YjUtMzIyMy00NDNjLWE3ZWYtODQzYmNhNDVhNDZmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0346336/"},{"rank":172,"imdb_id":"tt0434409","title":"V for Vendetta","rating":8.1,"votes":1249581,"genre":["Action","Drama","Sci-Fi"],"duration_min":132,"content_rating":"R","description":"A young woman living in a dystopian society meets a shadowy freedom fighter who is plotting to overthrow their tyrannical government.","image_url":"https://m.media-amazon.com/images/M/MV5BZDEwOTRjNjgtOGY0MC00NGYxLWFmYmQtNjc1ZjVhMTc0OWUxXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0434409/"},{"rank":173,"imdb_id":"tt0264464","title":"Catch Me If You Can","rating":8.1,"votes":1248442,"genre":["Biography","Crime","Drama"],"duration_min":141,"content_rating":"PG-13","description":"A runaway teenager lives an exciting life by forging checks and impersonating several professions, but his fraudulent activities soon attract the attention of the FBI.","image_url":"https://m.media-amazon.com/images/M/MV5BMTY5MzYzNjc5NV5BMl5BanBnXkFtZTYwNTUyNTc2._V1_.jpg","url":"https://www.imdb.com/title/tt0264464/"},{"rank":174,"imdb_id":"tt2096673","title":"Inside Out","rating":8.1,"votes":921516,"genre":["Animation","Adventure","Comedy"],"duration_min":95,"content_rating":"PG","description":"After a young girl is uprooted from her Midwest life and moved to San Francisco, her emotions conflict on how best to navigate her new reality.","image_url":"https://m.media-amazon.com/images/M/MV5BOTgxMDQwMDk0OF5BMl5BanBnXkFtZTgwNjU5OTg2NDE@._V1_.jpg","url":"https://www.imdb.com/title/tt2096673/"},{"rank":175,"imdb_id":"tt0117951","title":"Trainspotting","rating":8.1,"votes":770027,"genre":["Crime","Drama"],"duration_min":93,"content_rating":"R","description":"Renton, deeply immersed in the Edinburgh drug scene, tries to clean up and get out despite the allure of drugs and the influence of friends.","image_url":"https://m.media-amazon.com/images/M/MV5BYmVkNGJkMzQtYWQwOS00OTZmLThjODQtZjNjNzllYzRiNTE0XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0117951/"},{"rank":176,"imdb_id":"tt5027774","title":"Three Billboards Outside Ebbing, Missouri","rating":8.1,"votes":610511,"genre":["Comedy","Crime","Drama"],"duration_min":115,"content_rating":"R","description":"A mother personally challenges the local authorities to solve her daughter&apos;s murder when they fail to catch the culprit.","image_url":"https://m.media-amazon.com/images/M/MV5BMjI0ODcxNzM1N15BMl5BanBnXkFtZTgwMzIwMTEwNDI@._V1_.jpg","url":"https://www.imdb.com/title/tt5027774/"},{"rank":177,"imdb_id":"tt0097165","title":"Dead Poets Society","rating":8.1,"votes":658554,"genre":["Comedy","Drama"],"duration_min":128,"content_rating":"PG","description":"Maverick teacher John Keating returns in 1959 to the prestigious New England boys&apos; boarding school where he was once a star student, using poetry to embolden his pupils to new heights of self-expression.","image_url":"https://m.media-amazon.com/images/M/MV5BMDYwNGVlY2ItMWYxMS00YjZiLWE5MTAtYWM5NWQ2ZWJjY2Q3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0097165/"},{"rank":178,"imdb_id":"tt0042876","title":"Rashômon","rating":8.1,"votes":197311,"genre":["Crime","Drama","Mystery"],"duration_min":88,"content_rating":"Not Rated","description":"Three parties and a witness have four versions of a rape/murder in ninth-century Japan.","image_url":"https://m.media-amazon.com/images/M/MV5BZDlkYjViMDAtYjkxNy00ZDk1LWE5MmUtNDc4NDU3ZWJmOTYzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0042876/"},{"rank":179,"imdb_id":"tt1201607","title":"Harry Potter and the Deathly Hallows: Part 2","rating":8.1,"votes":1051430,"genre":["Adventure","Family","Fantasy"],"duration_min":130,"content_rating":"PG-13","description":"Harry, Ron and Hermione set out on a quest to eliminate the remaining horcruxes. On the other hand, the students and teachers must unite to defend Hogwarts against Lord Voldemort and his army.","image_url":"https://m.media-amazon.com/images/M/MV5BOTA1Mzc2N2ItZWRiNS00MjQzLTlmZDQtMjU0NmY1YWRkMGQ4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt1201607/"},{"rank":180,"imdb_id":"tt0050212","title":"The Bridge on the River Kwai","rating":8.1,"votes":249314,"genre":["Adventure","Drama","War"],"duration_min":161,"content_rating":"PG","description":"British POWs are forced to build a railway bridge across the river Kwai for their Japanese captors in occupied Burma, not knowing that the allied forces are planning a daring commando raid through the jungle to destroy it.","image_url":"https://m.media-amazon.com/images/M/MV5BNzdkYmU2YmItNmZiYy00OWQyLTg0YWYtZmUxM2U3YTRiNTQ1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0050212/"},{"rank":181,"imdb_id":"tt29623480","title":"The Wild Robot","rating":8.2,"votes":229359,"genre":["Animation","Adventure","Family"],"duration_min":102,"content_rating":"PG","description":"A sentient robot stranded on an uninhabited island raises an orphaned gosling while trying to fit in with the local wildlife.","image_url":"https://m.media-amazon.com/images/M/MV5BZWNiZjVlZTUtNGUwYi00MjJmLTg2MDctNWEzYTJiMzY1ODc4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt29623480/"},{"rank":182,"imdb_id":"tt0072684","title":"Barry Lyndon","rating":8.1,"votes":206053,"genre":["Adventure","Drama","War"],"duration_min":185,"content_rating":"PG","description":"An Irish rogue wins the heart of a rich widow and assumes her dead husband&apos;s aristocratic position in 18th-century England.","image_url":"https://m.media-amazon.com/images/M/MV5BNmM2MGQ5Y2UtYzA3ZC00ZDJlLTkwNDYtMjBmZGExZDJiN2RlXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0072684/"},{"rank":183,"imdb_id":"tt0052618","title":"Ben-Hur","rating":8.1,"votes":271698,"genre":["Adventure","Drama"],"duration_min":212,"content_rating":"G","description":"A Jewish prince is betrayed and sent into slavery by a Roman friend in 1st-century Jerusalem, but it&apos;s not long before he regains his freedom and comes back for revenge.","image_url":"https://m.media-amazon.com/images/M/MV5BNjg2M2E1YzYtOThmMC00NjAyLWI5MzgtMDEwOGFiODdlOGUzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0052618/"},{"rank":184,"imdb_id":"tt1291584","title":"Warrior","rating":8.1,"votes":530432,"genre":["Action","Drama","Sport"],"duration_min":140,"content_rating":"PG-13","description":"The youngest son of an alcoholic former boxer returns home, where he&apos;s trained by his father for competition in a mixed martial arts tournament - a path that puts the fighter on a collision course with his estranged, older brother.","image_url":"https://m.media-amazon.com/images/M/MV5BMTk4ODk5MTMyNV5BMl5BanBnXkFtZTcwMDMyNTg0Ng@@._V1_.jpg","url":"https://www.imdb.com/title/tt1291584/"},{"rank":185,"imdb_id":"tt0116282","title":"Fargo","rating":8.1,"votes":789591,"genre":["Crime","Drama","Thriller"],"duration_min":98,"content_rating":"R","description":"A car salesman&apos;s inept crime falls apart due to his and his henchmen&apos;s bungling and the persistent police work of a dogged detective.","image_url":"https://m.media-amazon.com/images/M/MV5BNjg4MWE0MjEtODFhNy00MjA5LTg5ODktMzgwNWFmZTAwNjBlXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0116282/"},{"rank":186,"imdb_id":"tt2119532","title":"Hacksaw Ridge","rating":8.1,"votes":686357,"genre":["Biography","Drama","History"],"duration_min":139,"content_rating":"R","description":"World War II American Army Medic Desmond T. Doss, serving during the Battle of Okinawa, refuses to kill people and becomes the first man in American history to receive the Medal of Honor without firing a shot.","image_url":"https://m.media-amazon.com/images/M/MV5BMjQ1NjM3MTUxNV5BMl5BanBnXkFtZTgwMDc5MTY5OTE@._V1_.jpg","url":"https://www.imdb.com/title/tt2119532/"},{"rank":187,"imdb_id":"tt1392190","title":"Mad Max: Fury Road","rating":8.1,"votes":1211088,"genre":["Action","Adventure","Sci-Fi"],"duration_min":120,"content_rating":"R","description":"In a post-apocalyptic wasteland, a woman rebels against a tyrannical ruler in search for her homeland with the aid of a group of female prisoners, a psychotic worshipper and a drifter named Max.","image_url":"https://m.media-amazon.com/images/M/MV5BZDRkODJhOTgtOTc1OC00NTgzLTk4NjItNDgxZDY4YjlmNDY2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt1392190/"},{"rank":188,"imdb_id":"tt0405159","title":"Million Dollar Baby","rating":8.1,"votes":768540,"genre":["Drama","Sport"],"duration_min":132,"content_rating":"PG-13","description":"Frankie, an ill-tempered old coach, reluctantly agrees to train aspiring boxer Maggie. Impressed with her determination and talent, he helps her become the best and the two soon form a close bond.","image_url":"https://m.media-amazon.com/images/M/MV5BMTkxNzA1NDQxOV5BMl5BanBnXkFtZTcwNTkyMTIzMw@@._V1_.jpg","url":"https://www.imdb.com/title/tt0405159/"},{"rank":189,"imdb_id":"tt0118849","title":"Bacheha-ye aseman","rating":8.2,"votes":90483,"genre":["Drama","Family","Sport"],"duration_min":89,"content_rating":"PG","description":"After a boy loses his sister&apos;s pair of shoes, he goes on a series of adventures in order to find them. When he can&apos;t, he tries a new way to &quot;win&quot; a new pair.","image_url":"https://m.media-amazon.com/images/M/MV5BZWZlMjNhNzgtZGRhOS00Y2U5LThjOTctODNjZTI0ZTBiYzBhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0118849/"},{"rank":190,"imdb_id":"tt0382932","title":"Ratatouille","rating":8.1,"votes":951552,"genre":["Animation","Adventure","Comedy"],"duration_min":111,"content_rating":"G","description":"A rat who can cook makes an unusual alliance with a young kitchen worker at a famous Paris restaurant.","image_url":"https://m.media-amazon.com/images/M/MV5BMTMzODU0NTkxMF5BMl5BanBnXkFtZTcwMjQ4MzMzMw@@._V1_.jpg","url":"https://www.imdb.com/title/tt0382932/"},{"rank":191,"imdb_id":"tt0096283","title":"Tonari no Totoro","rating":8.1,"votes":434450,"genre":["Animation","Adventure","Comedy"],"duration_min":86,"content_rating":"G","description":"When two girls move to the country to be near their ailing mother, they have adventures with the wondrous forest spirits who live nearby.","image_url":"https://m.media-amazon.com/images/M/MV5BYWM3MDE3YjEtMzIzZC00ODE5LTgxNTItNmUyMTBkM2M2NmNiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0096283/"},{"rank":192,"imdb_id":"tt0081398","title":"Raging Bull","rating":8.1,"votes":411218,"genre":["Biography","Drama","Sport"],"duration_min":129,"content_rating":"R","description":"The life of boxer Jake LaMotta, whose violence and temper that led him to the top in the ring destroyed his life outside of it.","image_url":"https://m.media-amazon.com/images/M/MV5BMjlkYmYyZWQtNTZkOS00ZjA0LWEwNWUtNzE2ZGNiYjg0MjA2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0081398/"},{"rank":193,"imdb_id":"tt1205489","title":"Gran Torino","rating":8.1,"votes":864814,"genre":["Drama"],"duration_min":116,"content_rating":"R","description":"After a Hmong teenager tries to steal his prized 1972 Gran Torino, a disgruntled, prejudiced Korean War veteran seeks to redeem both the boy and himself.","image_url":"https://m.media-amazon.com/images/M/MV5BMTc5NTk2OTU1Nl5BMl5BanBnXkFtZTcwMDc3NjAwMg@@._V1_.jpg","url":"https://www.imdb.com/title/tt1205489/"},{"rank":194,"imdb_id":"tt2024544","title":"12 Years a Slave","rating":8.1,"votes":789364,"genre":["Biography","Drama","History"],"duration_min":134,"content_rating":"R","description":"In the antebellum United States, Solomon Northup, a free black man from upstate New York, is abducted and sold into slavery.","image_url":"https://m.media-amazon.com/images/M/MV5BMjExMTEzODkyN15BMl5BanBnXkFtZTcwNTU4NTc4OQ@@._V1_.jpg","url":"https://www.imdb.com/title/tt2024544/"},{"rank":195,"imdb_id":"tt2278388","title":"The Grand Budapest Hotel","rating":8.1,"votes":976692,"genre":["Comedy","Drama"],"duration_min":99,"content_rating":"R","description":"A writer encounters the owner of an aging high-class hotel, who tells him of his early years serving as a lobby boy in the hotel&apos;s glorious years under an exceptional concierge.","image_url":"https://m.media-amazon.com/images/M/MV5BMzM5NjUxOTEyMl5BMl5BanBnXkFtZTgwNjEyMDM0MDE@._V1_.jpg","url":"https://www.imdb.com/title/tt2278388/"},{"rank":196,"imdb_id":"tt0353969","title":"Salinui chueok","rating":8.1,"votes":269952,"genre":["Crime","Drama","Mystery"],"duration_min":131,"content_rating":"Not Rated","description":"In a small Korean province in 1986, two detectives struggle with the case of multiple young women being found raped and murdered by an unknown culprit.","image_url":"https://m.media-amazon.com/images/M/MV5BYmRjOWE5NmMtYTdkYS00ODFlLWJiMTMtYzE2NDZlZjlkZDQ0XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0353969/"},{"rank":197,"imdb_id":"tt0892769","title":"How to Train Your Dragon","rating":8.1,"votes":899330,"genre":["Animation","Action","Adventure"],"duration_min":98,"content_rating":"PG","description":"A hapless young Viking who aspires to hunt dragons becomes the unlikely friend of a young dragon himself, and learns there may be more to the creatures than he assumed.","image_url":"https://m.media-amazon.com/images/M/MV5BMjA5NDQyMjc2NF5BMl5BanBnXkFtZTcwMjg5ODcyMw@@._V1_.jpg","url":"https://www.imdb.com/title/tt0892769/"},{"rank":198,"imdb_id":"tt0112471","title":"Before Sunrise","rating":8.1,"votes":380113,"genre":["Comedy","Drama","Romance"],"duration_min":101,"content_rating":"R","description":"A young man and woman meet on a train in Europe, and wind up spending one evening together in Vienna. Unfortunately, both know that this will probably be their only night together.","image_url":"https://m.media-amazon.com/images/M/MV5BZDZhZmI1ZTUtYWI3NC00NTMwLTk3NWMtNDc0OGNjM2I0ZjlmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0112471/"},{"rank":199,"imdb_id":"tt0083658","title":"Blade Runner","rating":8.1,"votes":884171,"genre":["Action","Drama","Sci-Fi"],"duration_min":117,"content_rating":"R","description":"A blade runner must pursue and terminate four replicants who stole a ship in space and have returned to Earth to find their creator.","image_url":"https://m.media-amazon.com/images/M/MV5BOWQ4YTBmNTQtMDYxMC00NGFjLTkwOGQtNzdhNmY1Nzc1MzUxXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0083658/"},{"rank":200,"imdb_id":"tt0198781","title":"Monsters, Inc.","rating":8.1,"votes":1079917,"genre":["Animation","Adventure","Comedy"],"duration_min":92,"content_rating":"G","description":"Two monsters whose job is to make human children scream accidentally let a little girl into their world and must now protect her from their own kind to return her home unscathed.","image_url":"https://m.media-amazon.com/images/M/MV5BMTY1NTI0ODUyOF5BMl5BanBnXkFtZTgwNTEyNjQ0MDE@._V1_.jpg","url":"https://www.imdb.com/title/tt0198781/"},{"rank":201,"imdb_id":"tt2267998","title":"Gone Girl","rating":8.1,"votes":1175266,"genre":["Drama","Mystery","Thriller"],"duration_min":149,"content_rating":"R","description":"The husband of a missing woman becomes the main suspect in her disappearance.","image_url":"https://m.media-amazon.com/images/M/MV5BMTk0MDQ3MzAzOV5BMl5BanBnXkFtZTgwNzU1NzE3MjE@._V1_.jpg","url":"https://www.imdb.com/title/tt2267998/"},{"rank":202,"imdb_id":"tt10872600","title":"Spider-Man: No Way Home","rating":8.1,"votes":1030621,"genre":["Action","Adventure","Fantasy"],"duration_min":148,"content_rating":"PG-13","description":"With Spider-Man&apos;s identity now revealed, Peter asks Doctor Strange for help. When a spell goes wrong, dangerous foes from other worlds start to appear.","image_url":"https://m.media-amazon.com/images/M/MV5BMmFiZGZjMmEtMTA0Ni00MzA2LTljMTYtZGI2MGJmZWYzZTQ2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt10872600/"},{"rank":203,"imdb_id":"tt0073195","title":"Jaws","rating":8.1,"votes":741842,"genre":["Adventure","Drama","Horror"],"duration_min":124,"content_rating":"PG","description":"When a massive killer shark unleashes chaos on a beach community off Long Island, it&apos;s up to the local police chief, a marine biologist, and an old seafarer to hunt the beast down.","image_url":"https://m.media-amazon.com/images/M/MV5BYjViNDQzNmUtYzkxZi00NTk5LTljMmItYjJlZmZkODIxNjU1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0073195/"},{"rank":204,"imdb_id":"tt1950186","title":"Ford v Ferrari","rating":8.1,"votes":576709,"genre":["Action","Biography","Drama"],"duration_min":152,"content_rating":"PG-13","description":"American car designer Carroll Shelby and driver Ken Miles battle corporate interference and the laws of physics to build a revolutionary race car for Ford in order to defeat Ferrari at the 24 Hours of Le Mans in 1966.","image_url":"https://m.media-amazon.com/images/M/MV5BOTBjNTEyNjYtYjdkNi00YzE5LTljYzUtZjVlYmYwZmJmZWYxXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt1950186/"},{"rank":205,"imdb_id":"tt0107207","title":"In the Name of the Father","rating":8.1,"votes":203428,"genre":["Biography","Crime","Drama"],"duration_min":133,"content_rating":"R","description":"An Irish man&apos;s coerced confession to an I.R.A. bombing he did not commit results in the imprisonment of his father as well. Meanwhile, a British lawyer fights to clear their names and free them.","image_url":"https://m.media-amazon.com/images/M/MV5BMGZiZDVjNzYtZWM4ZC00MzVkLThhNDEtMDJlOTBhYzVjMmNhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0107207/"},{"rank":206,"imdb_id":"tt3011894","title":"Relatos salvajes","rating":8.1,"votes":239501,"genre":["Comedy","Drama","Thriller"],"duration_min":122,"content_rating":"R","description":"Six short stories that explore the extremities of human behavior involving people in distress.","image_url":"https://m.media-amazon.com/images/M/MV5BNzAzMjA1ODAxOV5BMl5BanBnXkFtZTgwODg4NTQzNDE@._V1_.jpg","url":"https://www.imdb.com/title/tt3011894/"},{"rank":207,"imdb_id":"tt0015864","title":"The Gold Rush","rating":8.1,"votes":128436,"genre":["Adventure","Comedy","Drama"],"duration_min":95,"content_rating":"Approved","description":"A prospector goes to the Klondike during the 1890s gold rush in hopes of making his fortune, and is smitten with a girl he sees in a dance hall.","image_url":"https://m.media-amazon.com/images/M/MV5BNGU1NjYzYTAtZmY0YS00NWIzLTkzNzUtYzc2ZTIyOTIxZjVhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0015864/"},{"rank":208,"imdb_id":"tt0015324","title":"Sherlock Jr.","rating":8.1,"votes":66214,"genre":["Action","Comedy","Romance"],"duration_min":45,"content_rating":"Passed","description":"A film projectionist longs to be a detective, and puts his meagre skills to work when he is framed by a rival for stealing his girlfriend&apos;s father&apos;s pocketwatch.","image_url":"https://m.media-amazon.com/images/M/MV5BMjQzM2E2NjYtYmRjMC00ZmVlLTljZTgtNmQ5MGZlNDYyZTc5XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0015324/"},{"rank":209,"imdb_id":"tt0978762","title":"Mary and Max.","rating":8.1,"votes":202216,"genre":["Animation","Comedy","Drama"],"duration_min":92,"content_rating":"Not Rated","description":"In 1976 Melbourne, a lonely 8-year-old girl strikes up a correspondence with an unlikely pen pal: a severely obese 44-year-old New Yorker with Asperger&apos;s syndrome.","image_url":"https://m.media-amazon.com/images/M/MV5BNzY2Mjc4NjMtNGY4Mi00NzM5LTk3ZTQtN2VkNzVkMzRmM2Y2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0978762/"},{"rank":210,"imdb_id":"tt0077416","title":"The Deer Hunter","rating":8.1,"votes":387000,"genre":["Drama","War"],"duration_min":183,"content_rating":"R","description":"The lives of a group of friends are forever changed by the Vietnam War.","image_url":"https://m.media-amazon.com/images/M/MV5BZGI4YmVhMzMtMWExMS00MGZiLTg2MmItM2I2MWZjODAyM2U5XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0077416/"},{"rank":211,"imdb_id":"tt0046268","title":"Le salaire de la peur","rating":8.1,"votes":73797,"genre":["Adventure","Drama","Thriller"],"duration_min":156,"content_rating":"Not Rated","description":"In a decrepit South American village, four men are hired to transport an urgent nitroglycerine shipment without the equipment that would make it safe.","image_url":"https://m.media-amazon.com/images/M/MV5BMjI3MjU2Mzg2MF5BMl5BanBnXkFtZTgwOTg2MTMzMjE@._V1_.jpg","url":"https://www.imdb.com/title/tt0046268/"},{"rank":212,"imdb_id":"tt30472557","title":"Gekijô-ban Chensô Man Reze-hen","rating":8.3,"votes":61465,"genre":["Animation","Action","Adventure"],"duration_min":100,"content_rating":"R","description":"A direct sequel to the first season of the series &quot;Chainsaw Man&quot;, featuring Denji, a young man who co-exists with a chainsaw demon. Denji encounters a new romantic interest, but will his involvement place them both in danger?","image_url":"https://m.media-amazon.com/images/M/MV5BZmMzNGVhODktYmU5MS00MDg1LThlNTEtNTMyYTg5MDA0Njk4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt30472557/"},{"rank":213,"imdb_id":"tt0017925","title":"The General","rating":8.1,"votes":105361,"genre":["Action","Adventure","Comedy"],"duration_min":78,"content_rating":"Passed","description":"After being rejected by the Confederate military, not realizing it was due to his crucial civilian role, an engineer must single-handedly recapture his beloved locomotive after it is seized by Union spies and return it through ene...","image_url":"https://m.media-amazon.com/images/M/MV5BMTVhM2Y1MDUtMDkxYi00Y2UxLWI2MTMtZjMzYTY4ODM4MGIzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0017925/"},{"rank":214,"imdb_id":"tt5323662","title":"Koe no katachi","rating":8.2,"votes":145148,"genre":["Animation","Drama"],"duration_min":130,"content_rating":"Not Rated","description":"A deaf girl, Shoko, is bullied by the popular Shoya. As Shoya continues to bully Shoko, the class turns its back on him. Shoko transfers and Shoya grows up as an outcast. Alone and depressed, the regretful Shoya finds Shoko to mak...","image_url":"https://m.media-amazon.com/images/M/MV5BOTFiNzRiOWEtYTQwNy00NmRiLWE0ZWYtNTE0YjExZjFmZjkwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt5323662/"},{"rank":215,"imdb_id":"tt0075148","title":"Rocky","rating":8.1,"votes":693092,"genre":["Drama","Sport"],"duration_min":120,"content_rating":"PG","description":"A small-time Philadelphia boxer gets a supremely rare chance to fight the world heavyweight champion in a bout in which he strives to go the distance for his self-respect.","image_url":"https://m.media-amazon.com/images/M/MV5BZDEyY2M2MGMtYjg5OC00ZWFjLWFkZDQtNmQzZTdiYmYzZTBkXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0075148/"},{"rank":216,"imdb_id":"tt3315342","title":"Logan","rating":8.1,"votes":930432,"genre":["Action","Drama","Sci-Fi"],"duration_min":137,"content_rating":"R","description":"In a future where mutants are nearly extinct, an elderly and weary Logan leads a quiet life. But when Laura, a mutant child pursued by scientists, comes to him for help, he must get her to safety.","image_url":"https://m.media-amazon.com/images/M/MV5BM2JjODdkMGMtNmY2YS00OGM2LThiY2YtZGYyNzE4Nzc2ODA0XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt3315342/"},{"rank":217,"imdb_id":"tt0252488","title":"Hababam Sinifi: Sinifta Kaldi","rating":8.4,"votes":30913,"genre":["Comedy"],"duration_min":95,"content_rating":NaN,"description":"A group of students have failed their exams and must return for another year. Distracting them all is a new young female teacher, who they try out their usual tricks on.","image_url":"https://m.media-amazon.com/images/M/MV5BZmY3MjVhMmQtOTcwYy00ZjcyLWFiZDgtN2JiODVjNjQzYWQyXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0252488/"},{"rank":218,"imdb_id":"tt0325980","title":"Pirates of the Caribbean: The Curse of the Black Pearl","rating":8.1,"votes":1331738,"genre":["Action","Adventure","Fantasy"],"duration_min":143,"content_rating":"PG-13","description":"An intrepid blacksmith teams up with an eccentric pirate captain to save his love from an undead pirate crew.","image_url":"https://m.media-amazon.com/images/M/MV5BNDhlMzEyNzItMTA5Mi00YWRhLThlNTktYTQyMTA0MDIyNDEyXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0325980/"},{"rank":219,"imdb_id":"tt0031679","title":"Mr. Smith Goes to Washington","rating":8.1,"votes":129804,"genre":["Comedy","Drama"],"duration_min":129,"content_rating":"Approved","description":"A naive youth leader is appointed to fill a vacancy in the U.S. Senate. His idealistic plans promptly collide with corruption at home and subterfuge from his hero in Washington, but he tries to forge ahead despite attacks on his c...","image_url":"https://m.media-amazon.com/images/M/MV5BMDU4ZjNmMjEtMjcxYi00NDAxLWFlMjQtNWIyNjg5NWUzNTdjXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0031679/"},{"rank":220,"imdb_id":"tt0046438","title":"Tôkyô monogatari","rating":8.1,"votes":78107,"genre":["Drama"],"duration_min":137,"content_rating":"Not Rated","description":"An old couple visit their children and grandchildren in the city, but receive little attention.","image_url":"https://m.media-amazon.com/images/M/MV5BODdkNzcxZjItMDU2Yy00Y2JlLWFkYTQtNzIwM2Q4MWU5MTU2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0046438/"},{"rank":221,"imdb_id":"tt0113247","title":"La Haine","rating":8.1,"votes":228426,"genre":["Crime","Drama"],"duration_min":98,"content_rating":"Not Rated","description":"24 hours in the lives of three young men in the French suburbs the day after a violent riot.","image_url":"https://m.media-amazon.com/images/M/MV5BMThlMDA3NDYtZGM2Zi00NmJhLThlYWItZjViZTkzZWU1ZWRiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0113247/"},{"rank":222,"imdb_id":"tt1895587","title":"Spotlight","rating":8.1,"votes":537176,"genre":["Biography","Crime","Drama"],"duration_min":129,"content_rating":"R","description":"The true story of how the Boston Globe uncovered the massive scandal of child molestation and cover-up within the local Catholic Archdiocese, shaking the entire Catholic Church to its core.","image_url":"https://m.media-amazon.com/images/M/MV5BMjIyOTM5OTIzNV5BMl5BanBnXkFtZTgwMDkzODE2NjE@._V1_.jpg","url":"https://www.imdb.com/title/tt1895587/"},{"rank":223,"imdb_id":"tt0047296","title":"On the Waterfront","rating":8.1,"votes":179227,"genre":["Crime","Drama","Thriller"],"duration_min":108,"content_rating":"Approved","description":"An ex-prize fighter turned New Jersey longshoreman struggles to stand up to his corrupt union bosses, including his older brother, as he starts to connect with the grieving sister of one of the syndicate&apos;s victims.","image_url":"https://m.media-amazon.com/images/M/MV5BZDJlYTM1ZGYtZTM4YS00MzFhLThiZjktYzQ0ZjAzMGYwZTU3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0047296/"},{"rank":224,"imdb_id":"tt15097216","title":"Jai Bhim","rating":8.6,"votes":235016,"genre":["Crime","Drama"],"duration_min":164,"content_rating":"Approved","description":"When a tribal man is arrested for a case of alleged theft, his wife turns to a human-rights lawyer to help bring justice.","image_url":"https://m.media-amazon.com/images/M/MV5BZjEyNDIzNmEtMjdkYS00ZDAwLTljOWYtNDRhYTVhYTlmOTk1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt15097216/"},{"rank":225,"imdb_id":"tt0059742","title":"The Sound of Music","rating":8.1,"votes":292234,"genre":["Biography","Drama","Family"],"duration_min":174,"content_rating":"G","description":"A young novice is sent by her convent in 1930s Austria to become a governess to the seven children of a widowed naval officer.","image_url":"https://m.media-amazon.com/images/M/MV5BYWJhYmU4MjQtZDJhYi00ZGVjLTlkNTEtNzkzNGVjOWQ3MjcwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0059742/"},{"rank":226,"imdb_id":"tt0050986","title":"Smultronstället","rating":8.1,"votes":124930,"genre":["Drama","Romance"],"duration_min":92,"content_rating":"Not Rated","description":"After living a life marked by coldness, an aging professor is forced to confront the emptiness of his existence.","image_url":"https://m.media-amazon.com/images/M/MV5BZWQ5MDllM2EtZWRmNS00MmZiLWI4ZWQtMjRiY2Q5MTAxODY4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0050986/"},{"rank":227,"imdb_id":"tt26548265","title":"Maharaja","rating":8.3,"votes":83316,"genre":["Action","Crime","Drama"],"duration_min":141,"content_rating":NaN,"description":"A barber seeks vengeance after his home is burglarized, cryptically telling police his &quot;lakshmi&quot; has been taken, leaving them uncertain if it&apos;s a person or object. His quest to recover the elusive &quot;lakshmi&quot; unfolds.","image_url":"https://m.media-amazon.com/images/M/MV5BOTFlMTIxOGItZTk0Zi00MTk2LWJiM2UtMzlhZWYzNjQ4N2Y3XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt26548265/"},{"rank":228,"imdb_id":"tt0088247","title":"The Terminator","rating":8.1,"votes":1008826,"genre":["Action","Adventure","Sci-Fi"],"duration_min":107,"content_rating":"R","description":"A cyborg assassin from the future attempts to find and kill a young woman who is destined to give birth to a warrior that will lead a resistance to save humankind from extinction.","image_url":"https://m.media-amazon.com/images/M/MV5BZmE0YzIxM2QtMGNlMi00MjRmLWE3MWMtOWQzMGVjMmU0YTFmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0088247/"},{"rank":229,"imdb_id":"tt0036868","title":"The Best Years of Our Lives","rating":8.1,"votes":76509,"genre":["Drama","Romance","War"],"duration_min":170,"content_rating":"Approved","description":"Three WWII veterans return home forever changed and find it difficult to adjust to their new realities.","image_url":"https://m.media-amazon.com/images/M/MV5BNTgxMzUyODQtMDJmZC00ZGMyLWI3MzAtZTYwYjBjZjFmMzIxXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0036868/"},{"rank":230,"imdb_id":"tt0041959","title":"The Third Man","rating":8.1,"votes":196177,"genre":["Drama","Film-Noir","Mystery"],"duration_min":104,"content_rating":"Approved","description":"Pulp novelist Holly Martins travels to shadowy, mystifying post-war Vienna only to find himself investigating the mysterious sudden death of old friend Harry Lime.","image_url":"https://m.media-amazon.com/images/M/MV5BNGVjMTMxZTQtMmVlNy00YmI0LWJjMDUtYTgyZWU1Njg5ZGRiXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0041959/"},{"rank":231,"imdb_id":"tt0118715","title":"The Big Lebowski","rating":8.1,"votes":918909,"genre":["Comedy","Crime"],"duration_min":117,"content_rating":"R","description":"Jeff &quot;The Dude&quot; Lebowski, mistaken for a millionaire of the same name, seeks restitution for his ruined rug and enlists his bowling buddies to help get it.","image_url":"https://m.media-amazon.com/images/M/MV5BY2E3OWQ5OWYtYTRkMC00NjVjLWIzZDQtNmRmM2ZiYTIyYmYxXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0118715/"},{"rank":232,"imdb_id":"tt0381681","title":"Before Sunset","rating":8.1,"votes":316909,"genre":["Drama","Romance"],"duration_min":80,"content_rating":"R","description":"Nine years after Jesse and Celine first met, they encounter each other again on the French leg of Jesse&apos;s book tour.","image_url":"https://m.media-amazon.com/images/M/MV5BMTQ1MjAwNTM5Ml5BMl5BanBnXkFtZTYwNDM0MTc3._V1_.jpg","url":"https://www.imdb.com/title/tt0381681/"},{"rank":233,"imdb_id":"tt0317705","title":"The Incredibles","rating":8.0,"votes":906369,"genre":["Animation","Action","Adventure"],"duration_min":115,"content_rating":"PG","description":"While trying to lead a quiet suburban life, a family of undercover superheroes are forced into action to save the world.","image_url":"https://m.media-amazon.com/images/M/MV5BMTY5OTU0OTc2NV5BMl5BanBnXkFtZTcwMzU4MDcyMQ@@._V1_.jpg","url":"https://www.imdb.com/title/tt0317705/"},{"rank":234,"imdb_id":"tt3170832","title":"Room","rating":8.1,"votes":481750,"genre":["Drama","Thriller"],"duration_min":118,"content_rating":"R","description":"A little boy is held captive in a room with his mother since his birth, so he has never known the world outside.","image_url":"https://m.media-amazon.com/images/M/MV5BMjE4NzgzNzEwMl5BMl5BanBnXkFtZTgwMTMzMDE0NjE@._V1_.jpg","url":"https://www.imdb.com/title/tt3170832/"},{"rank":235,"imdb_id":"tt1028532","title":"Hachi: A Dog&apos;s Tale","rating":8.1,"votes":344633,"genre":["Biography","Drama","Family"],"duration_min":93,"content_rating":"G","description":"Professor Wilson discovers a lost Akita puppy on his way home. Despite objections from his wife, Hachi endears himself to the family and grows to be Parker&apos;s loyal companion. As their bond grows deeper, a beautiful relationship un...","image_url":"https://m.media-amazon.com/images/M/MV5BNTU5NjYyYTgtZGQ3My00MzRhLThjNGYtZmVjN2JjYjhkMjhhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt1028532/"},{"rank":236,"imdb_id":"tt0050976","title":"Det sjunde inseglet","rating":8.1,"votes":215929,"genre":["Drama","Fantasy"],"duration_min":96,"content_rating":"Not Rated","description":"A knight returning to Sweden after the Crusades seeks answers about life, death, and the existence of God as he plays chess against the Grim Reaper during the Black Plague.","image_url":"https://m.media-amazon.com/images/M/MV5BZDlmYTkzOWUtODQ0MS00MmM4LWE3ZjMtYTEwNGUwMmJkYzIxXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0050976/"},{"rank":237,"imdb_id":"tt0395169","title":"Hotel Rwanda","rating":8.1,"votes":392958,"genre":["Biography","Drama","History"],"duration_min":121,"content_rating":"PG-13","description":"Paul Rusesabagina, a hotel manager, houses over a thousand Tutsi refugees during their struggle against the Hutu militia in Rwanda, Africa.","image_url":"https://m.media-amazon.com/images/M/MV5BY2FmMWRmZmQtN2IzMS00OGVmLWFmNjktMTM0YWQzODcwYTEwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0395169/"},{"rank":238,"imdb_id":"tt0091763","title":"Platoon","rating":8.1,"votes":473273,"genre":["Drama","War"],"duration_min":120,"content_rating":"R","description":"Chris Taylor, a neophyte recruit in Vietnam, finds himself caught in a battle of wills between two sergeants, one good and the other evil. A shrewd examination of the brutality of war and the duality of man in conflict.","image_url":"https://m.media-amazon.com/images/M/MV5BZjE4YjllODAtZGMxZS00Mjg2LThkOWUtZjNkMjQ5YThiNDU4XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0091763/"},{"rank":239,"imdb_id":"tt0070047","title":"The Exorcist","rating":8.1,"votes":499921,"genre":["Horror"],"duration_min":122,"content_rating":"R","description":"When a mysterious entity possesses a young girl, her mother seeks the help of two Catholic priests to save her life.","image_url":"https://m.media-amazon.com/images/M/MV5BZjg3YjE4ZjAtYTdmYS00ZTBkLWE1ZjgtNzAzODUwNzRiYjlmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0070047/"},{"rank":240,"imdb_id":"tt0129167","title":"The Iron Giant","rating":8.1,"votes":262301,"genre":["Animation","Action","Adventure"],"duration_min":86,"content_rating":"PG","description":"A young boy befriends a giant robot from outer space that a paranoid government agent wants to destroy.","image_url":"https://m.media-amazon.com/images/M/MV5BODM4ZjZjMGEtYmFiMy00MThjLWIzZjUtMDU0ODg1NTI2MzIwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0129167/"},{"rank":241,"imdb_id":"tt1979320","title":"Rush","rating":8.1,"votes":561584,"genre":["Biography","Drama","Sport"],"duration_min":123,"content_rating":"R","description":"James Hunt and Niki Lauda, two extremely skilled Formula One racers, have an intense rivalry with each other. However, it is their enmity that pushes them to their limits.","image_url":"https://m.media-amazon.com/images/M/MV5BMTZhOGQxM2ItNGQyYy00YzE5LWI5MjMtNmMzNGQzNDE1OTUzXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt1979320/"},{"rank":242,"imdb_id":"tt0092005","title":"Stand by Me","rating":8.1,"votes":489625,"genre":["Adventure","Drama"],"duration_min":89,"content_rating":"R","description":"A writer recounts a childhood journey with his friends to view the body of a boy who went missing in the woods.","image_url":"https://m.media-amazon.com/images/M/MV5BNGJkNTUwM2MtZWE2MS00YjNkLWE3MjktNWQwZDQxMDIyZWVmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0092005/"},{"rank":243,"imdb_id":"tt0032138","title":"The Wizard of Oz","rating":8.1,"votes":469223,"genre":["Adventure","Family","Fantasy"],"duration_min":102,"content_rating":"G","description":"Young Dorothy Gale and her dog Toto are swept away by a tornado from their Kansas farm to the magical Land of Oz and embark on a quest with three new friends to see the Wizard, who can return her to her home and fulfill the others...","image_url":"https://m.media-amazon.com/images/M/MV5BYWRmY2I0MGItYTQ0OC00NWZmLWIwMDktYjJlNDc0MzVhMmViXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0032138/"},{"rank":244,"imdb_id":"tt0058946","title":"La battaglia di Algeri","rating":8.1,"votes":76184,"genre":["Drama","War"],"duration_min":121,"content_rating":"Not Rated","description":"In the 1950s, fear and violence escalate as the people of Algiers fight for independence from the French government.","image_url":"https://m.media-amazon.com/images/M/MV5BMTY2Mjk0OGEtYTM3Yy00ZWZiLWFhNjAtNGExMjEzNGVmMDMxXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0058946/"},{"rank":245,"imdb_id":"tt0476735","title":"Babam ve Oglum","rating":8.2,"votes":101335,"genre":["Drama"],"duration_min":112,"content_rating":"Not Rated","description":"The family of a left-wing journalist is torn apart after the military coup of Turkey in 1980.","image_url":"https://m.media-amazon.com/images/M/MV5BZDE3MTBkNmQtNGFjMC00YTcwLWExY2ItN2MyMGZkNWJlMmFmXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0476735/"},{"rank":246,"imdb_id":"tt0019254","title":"La passion de Jeanne d&apos;Arc","rating":8.1,"votes":68587,"genre":["Biography","Drama","History"],"duration_min":114,"content_rating":"Passed","description":"In 1431, Jeanne d&apos;Arc is placed on trial on charges of heresy, and the ecclesiastical jurists attempt to force her to recant her claims of holy visions.","image_url":"https://m.media-amazon.com/images/M/MV5BNTE1MDliZjgtYTU2Yy00YjAxLTljYTItNDE2ZGYwYTY1MGQ1XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt0019254/"},{"rank":247,"imdb_id":"tt4016934","title":"Ah-ga-ssi","rating":8.1,"votes":205397,"genre":["Drama","Romance","Thriller"],"duration_min":145,"content_rating":"Not Rated","description":"In 1930s Korea, a girl is hired as a handmaiden to a Japanese heiress who lives a secluded life on a countryside estate. But the maid has a secret: She is a pickpocket recruited by a swindler to help seduce the Lady and steal her ...","image_url":"https://m.media-amazon.com/images/M/MV5BOTllZDI1OGItOGUxNS00OGZhLWIzMjAtYzllZTY1YTA0ZmYwXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt4016934/"},{"rank":248,"imdb_id":"tt3417422","title":"Drishyam","rating":8.4,"votes":49015,"genre":["Crime","Drama","Mystery"],"duration_min":160,"content_rating":"Not Rated","description":"A man goes to extreme lengths to save his family from punishment after the family commits an accidental crime.","image_url":"https://m.media-amazon.com/images/M/MV5BM2MwMjNlNjctYjA2ZS00ZDA4LWJmNTYtODg5NDY1YzQzZDg2XkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt3417422/"},{"rank":249,"imdb_id":"tt1954470","title":"Gangs of Wasseypur","rating":8.2,"votes":114808,"genre":["Action","Comedy","Crime"],"duration_min":321,"content_rating":"Not Rated","description":"A clash between Sultan and Shahid Khan leads to the expulsion of Khan from Wasseypur, and ignites a deadly blood feud spanning three generations.","image_url":"https://m.media-amazon.com/images/M/MV5BNWQyMmJkYTItNDUyYS00MjgwLWFmYjUtOWQ1NmRjOGZlOTZhXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt1954470/"},{"rank":250,"imdb_id":"tt21626284","title":"Laapataa Ladies","rating":8.3,"votes":60885,"genre":["Comedy","Drama"],"duration_min":122,"content_rating":"TV-14","description":"The misadventures of two young brides who get lost from the same train. From mistaken identities to laugh-out-aloud escapades, the ensuing chaos guarantees laughter galore and heartwarming moments.","image_url":"https://m.media-amazon.com/images/M/MV5BZGI5NzVmNDktZWY2Ni00ZGMwLTlhMzctNzJhYTgzZmQ2ZjNjXkEyXkFqcGc@._V1_.jpg","url":"https://www.imdb.com/title/tt21626284/"}];
+
+// ========== STATE ==========
+let charts = {};
+let moviesPage = 1;
+const PAGE_SIZE = 24;
+
+// ========== HELPERS ==========
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+function fmt(n) {
+  if (n == null) return '—';
+  return n.toLocaleString('en-US');
+}
+function avg(arr) {
+  const a = arr.filter(x => x != null);
+  return a.length ? a.reduce((s,v)=>s+v,0)/a.length : 0;
+}
+function median(arr) {
+  const a = arr.filter(x => x != null).sort((x,y)=>x-y);
+  if (!a.length) return 0;
+  const m = Math.floor(a.length/2);
+  return a.length%2 ? a[m] : (a[m-1]+a[m])/2;
+}
+function std(arr) {
+  const a = arr.filter(x => x != null);
+  if (a.length < 2) return 0;
+  const m = avg(a);
+  return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/(a.length-1));
+}
+function genreCounts() {
+  const c = {};
+  MOVIES.forEach(m => m.genre.forEach(g => { c[g] = (c[g]||0)+1; }));
+  return Object.entries(c).sort((a,b)=>b[1]-a[1]);
+}
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+const chartDefaults = {
+  color: '#a0a0b8',
+  borderColor: '#2a2a3d',
+  font: { family: 'Inter' }
+};
+
+// ========== NAVIGATION ==========
+$$('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    $$('.page').forEach(p => p.classList.remove('active'));
+    const page = $('#page-' + btn.dataset.page);
+    page.classList.add('active');
+    // lazy init
+    if (btn.dataset.page === 'genres') initGenres();
+    if (btn.dataset.page === 'ratings') initRatings();
+    if (btn.dataset.page === 'movies') renderMovies();
+    if (btn.dataset.page === 'compare') initCompare();
+    $('#sidebar').classList.remove('open');
+  });
+});
+$('#menuBtn').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+
+// ========== OVERVIEW ==========
+function initOverview() {
+  const ratings = MOVIES.map(m => m.rating);
+  const votes = MOVIES.map(m => m.votes);
+  const runtimes = MOVIES.map(m => m.duration_min);
+
+  $('#kpiGrid').innerHTML = [
+    {label:'Total Movies', value: MOVIES.length, sub:'IMDb Top 250', color:'#f5c518'},
+    {label:'Avg Rating', value: avg(ratings).toFixed(2), sub:`Median ${median(ratings).toFixed(2)}`, color:'#3b82f6'},
+    {label:'Avg Votes', value: fmt(Math.round(avg(votes))), sub:`Max ${fmt(Math.max(...votes))}`, color:'#22c55e'},
+    {label:'Avg Runtime', value: Math.round(avg(runtimes))+' min', sub:`Range ${Math.min(...runtimes)}–${Math.max(...runtimes)}`, color:'#a855f7'},
+    {label:'Unique Genres', value: genreCounts().length, sub:'Across all titles', color:'#06b6d4'},
+    {label:'Top Score', value: Math.max(...ratings).toFixed(1), sub: MOVIES.find(m=>m.rating===Math.max(...ratings)).title, color:'#ef4444'},
+  ].map(k => `
+    <div class="kpi" style="--kpi-color:${k.color}">
+      <div class="label">${k.label}</div>
+      <div class="value">${k.value}</div>
+      <div class="sub">${k.sub}</div>
+    </div>`).join('');
+
+  // Rating distribution
+  const buckets = {};
+  ratings.forEach(r => {
+    const b = r.toFixed(1);
+    buckets[b] = (buckets[b]||0)+1;
+  });
+  const sortedBuckets = Object.keys(buckets).sort((a,b)=>parseFloat(a)-parseFloat(b));
+  destroyChart('ratingDist');
+  charts.ratingDist = new Chart($('#chartRatingDist'), {
+    type: 'bar',
+    data: {
+      labels: sortedBuckets,
+      datasets: [{
+        label: 'Movies',
+        data: sortedBuckets.map(k => buckets[k]),
+        backgroundColor: sortedBuckets.map((_,i) => `hsla(${40 + i*8}, 90%, 50%, 0.8)`),
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: chartDefaults.color, font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: chartDefaults.color }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
+      }
+    }
+  });
+
+  // Top genres doughnut
+  const topG = genreCounts().slice(0, 10);
+  destroyChart('topGenres');
+  charts.topGenres = new Chart($('#chartTopGenres'), {
+    type: 'doughnut',
+    data: {
+      labels: topG.map(g => g[0]),
+      datasets: [{
+        data: topG.map(g => g[1]),
+        backgroundColor: ['#f5c518','#3b82f6','#22c55e','#a855f7','#ef4444','#06b6d4','#f97316','#ec4899','#84cc16','#6366f1'],
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { color: chartDefaults.color, font: { size: 11 }, boxWidth: 12, padding: 10 } }
+      }
+    }
+  });
+
+  // Content rating
+  const cr = {};
+  MOVIES.forEach(m => { const k = m.content_rating || 'Unknown'; cr[k] = (cr[k]||0)+1; });
+  const crSorted = Object.entries(cr).sort((a,b)=>b[1]-a[1]);
+  destroyChart('content');
+  charts.content = new Chart($('#chartContent'), {
+    type: 'bar',
+    data: {
+      labels: crSorted.map(c => c[0]),
+      datasets: [{
+        data: crSorted.map(c => c[1]),
+        backgroundColor: '#3b82f6aa',
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: chartDefaults.color }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: chartDefaults.color, font: { size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+
+  // Runtime vs Rating scatter
+  destroyChart('runtimeRating');
+  charts.runtimeRating = new Chart($('#chartRuntimeRating'), {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        label: 'Movies',
+        data: MOVIES.map(m => ({ x: m.duration_min, y: m.rating })),
+        backgroundColor: 'rgba(245,197,24,0.5)',
+        pointRadius: 4,
+        pointHoverRadius: 7,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const m = MOVIES.find(x => x.duration_min === ctx.raw.x && x.rating === ctx.raw.y);
+              return m ? `${m.title}: ${m.rating} ★ · ${m.duration_min} min` : '';
+            }
+          }
+        }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Runtime (min)', color: chartDefaults.color }, ticks: { color: chartDefaults.color }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { title: { display: true, text: 'Rating', color: chartDefaults.color }, ticks: { color: chartDefaults.color }, grid: { color: 'rgba(255,255,255,0.04)' }, min: 7.8 }
+      }
+    }
+  });
+
+  // Top 10 table
+  $('#top10Body').innerHTML = MOVIES.slice(0, 10).map((m, i) => {
+    const badge = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+    return `<tr style="cursor:pointer" onclick="showMovie('${m.imdb_id}')">
+      <td><span class="rank-badge ${badge}">${m.rank}</span></td>
+      <td><div class="movie-cell">
+        ${m.image_url ? `<img src="${m.image_url}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
+        <div><div class="t">${m.title}</div><div class="s">${m.content_rating || ''}</div></div>
+      </div></td>
+      <td><span class="rating-pill">★ ${m.rating}</span></td>
+      <td>${fmt(m.votes)}</td>
+      <td>${m.duration_min} min</td>
+      <td>${m.genre.map(g => `<span class="genre-tag">${g}</span>`).join('')}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ========== MOVIES PAGE ==========
+function getFilteredMovies() {
+  let list = [...MOVIES];
+  const q = ($('#searchInput').value || '').toLowerCase().trim();
+  const genre = $('#genreFilter').value;
+  const rating = $('#ratingFilter').value;
+  const sort = $('#sortFilter').value;
+
+  if (q) list = list.filter(m => m.title.toLowerCase().includes(q));
+  if (genre) list = list.filter(m => m.genre.includes(genre));
+  if (rating === '9+') list = list.filter(m => m.rating >= 9);
+  else if (rating === '8.5+') list = list.filter(m => m.rating >= 8.5 && m.rating < 9);
+  else if (rating === '8.0+') list = list.filter(m => m.rating >= 8 && m.rating < 8.5);
+
+  switch (sort) {
+    case 'rating-desc': list.sort((a,b) => b.rating - a.rating); break;
+    case 'rating-asc': list.sort((a,b) => a.rating - b.rating); break;
+    case 'votes-desc': list.sort((a,b) => b.votes - a.votes); break;
+    case 'runtime-desc': list.sort((a,b) => b.duration_min - a.duration_min); break;
+    case 'title': list.sort((a,b) => a.title.localeCompare(b.title)); break;
+    default: list.sort((a,b) => a.rank - b.rank);
+  }
+  return list;
+}
+
+function renderMovies() {
+  // populate genre filter once
+  const gf = $('#genreFilter');
+  if (gf.options.length <= 1) {
+    genreCounts().forEach(([g]) => {
+      const o = document.createElement('option');
+      o.value = g; o.textContent = g;
+      gf.appendChild(o);
+    });
+  }
+
+  const list = getFilteredMovies();
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  if (moviesPage > totalPages) moviesPage = 1;
+  const slice = list.slice((moviesPage-1)*PAGE_SIZE, moviesPage*PAGE_SIZE);
+  const mode = $('#viewMode').value;
+  const container = $('#moviesContainer');
+
+  if (!slice.length) {
+    container.innerHTML = `<div class="empty"><div class="icon">🎬</div>No movies match your filters</div>`;
+    $('#moviesPagination').innerHTML = '';
+    return;
+  }
+
+  if (mode === 'grid') {
+    container.innerHTML = `<div class="movie-grid">${slice.map(m => `
+      <div class="movie-card" onclick="showMovie('${m.imdb_id}')">
+        ${m.image_url
+          ? `<img class="poster" src="${m.image_url}" alt="${m.title}" loading="lazy" onerror="this.outerHTML='<div class=poster-ph>🎬</div>'">`
+          : `<div class="poster-ph">🎬</div>`}
+        <div class="body">
+          <div class="title">${m.title}</div>
+          <div class="meta">
+            <span class="rating-pill" style="font-size:.7rem;padding:2px 7px">★ ${m.rating}</span>
+            <span>#${m.rank}</span>
+          </div>
+        </div>
+      </div>`).join('')}</div>`;
+  } else {
+    container.innerHTML = `<div class="card" style="padding:0;overflow:hidden"><div class="table-wrap"><table>
+      <thead><tr><th>Rank</th><th>Title</th><th>Rating</th><th>Votes</th><th>Runtime</th><th>Genres</th></tr></thead>
+      <tbody>${slice.map(m => `<tr style="cursor:pointer" onclick="showMovie('${m.imdb_id}')">
+        <td><span class="rank-badge">${m.rank}</span></td>
+        <td><div class="movie-cell">
+          ${m.image_url ? `<img src="${m.image_url}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
+          <div class="t">${m.title}</div>
+        </div></td>
+        <td><span class="rating-pill">★ ${m.rating}</span></td>
+        <td>${fmt(m.votes)}</td>
+        <td>${m.duration_min} min</td>
+        <td>${m.genre.map(g=>`<span class="genre-tag">${g}</span>`).join('')}</td>
+      </tr>`).join('')}</tbody></table></div></div>`;
+  }
+
+  // pagination
+  let pagHtml = '';
+  for (let i = 1; i <= totalPages; i++) {
+    if (totalPages > 9 && Math.abs(i - moviesPage) > 2 && i !== 1 && i !== totalPages) {
+      if (i === 2 || i === totalPages - 1) pagHtml += `<button disabled>…</button>`;
+      continue;
+    }
+    pagHtml += `<button class="${i===moviesPage?'active':''}" data-p="${i}">${i}</button>`;
+  }
+  $('#moviesPagination').innerHTML = pagHtml;
+  $$('#moviesPagination button[data-p]').forEach(b => {
+    b.addEventListener('click', () => { moviesPage = +b.dataset.p; renderMovies(); window.scrollTo({top:0,behavior:'smooth'}); });
+  });
+}
+
+['searchInput','genreFilter','ratingFilter','sortFilter','viewMode'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => { moviesPage = 1; renderMovies(); });
+  document.getElementById(id).addEventListener('change', () => { moviesPage = 1; renderMovies(); });
+});
+
+// ========== GENRES ==========
+let genresInited = false;
+function initGenres() {
+  if (genresInited) return;
+  genresInited = true;
+
+  const gc = genreCounts();
+  // frequency
+  destroyChart('genreFreq');
+  charts.genreFreq = new Chart($('#chartGenreFreq'), {
+    type: 'bar',
+    data: {
+      labels: gc.map(g => g[0]),
+      datasets: [{ data: gc.map(g => g[1]), backgroundColor: '#f5c518aa', borderRadius: 5 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: chartDefaults.color }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: chartDefaults.color, font: { size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+
+  // avg rating by genre (min 5)
+  const genreStats = {};
+  MOVIES.forEach(m => {
+    m.genre.forEach(g => {
+      if (!genreStats[g]) genreStats[g] = { ratings: [], votes: [], runtimes: [], top: null };
+      genreStats[g].ratings.push(m.rating);
+      genreStats[g].votes.push(m.votes);
+      genreStats[g].runtimes.push(m.duration_min);
+      if (!genreStats[g].top || m.rating > genreStats[g].top.rating) genreStats[g].top = m;
+    });
+  });
+
+  const filtered = Object.entries(genreStats)
+    .filter(([,s]) => s.ratings.length >= 5)
+    .map(([g,s]) => ({ genre: g, avgR: avg(s.ratings), count: s.ratings.length, avgV: avg(s.votes), avgRT: avg(s.runtimes), top: s.top }))
+    .sort((a,b) => b.avgR - a.avgR);
+
+  destroyChart('genreRating');
+  charts.genreRating = new Chart($('#chartGenreRating'), {
+    type: 'bar',
+    data: {
+      labels: filtered.map(f => f.genre),
+      datasets: [{ data: filtered.map(f => +f.avgR.toFixed(2)), backgroundColor: '#3b82f6aa', borderRadius: 5 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { min: 8, ticks: { color: chartDefaults.color }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: chartDefaults.color, font: { size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+
+  // table
+  const allStats = Object.entries(genreStats)
+    .map(([g,s]) => ({ genre: g, count: s.ratings.length, avgR: avg(s.ratings), avgV: avg(s.votes), avgRT: avg(s.runtimes), top: s.top }))
+    .sort((a,b) => b.count - a.count);
+
+  $('#genreTableBody').innerHTML = allStats.map(s => `<tr>
+    <td><strong style="color:var(--text)">${s.genre}</strong></td>
+    <td>${s.count}</td>
+    <td><span class="rating-pill">★ ${s.avgR.toFixed(2)}</span></td>
+    <td>${fmt(Math.round(s.avgV))}</td>
+    <td>${Math.round(s.avgRT)} min</td>
+    <td style="cursor:pointer;color:var(--accent)" onclick="showMovie('${s.top.imdb_id}')">${s.top.title}</td>
+  </tr>`).join('');
+}
+
+// ========== RATINGS ==========
+let ratingsInited = false;
+function initRatings() {
+  if (ratingsInited) return;
+  ratingsInited = true;
+
+  const ratings = MOVIES.map(m => m.rating);
+  const votes = MOVIES.map(m => m.votes);
+  const runtimes = MOVIES.map(m => m.duration_min);
+
+  // correlation
+  const n = MOVIES.length;
+  const meanR = avg(ratings), meanV = avg(votes);
+  let num = 0, denR = 0, denV = 0;
+  for (let i = 0; i < n; i++) {
+    num += (ratings[i]-meanR)*(votes[i]-meanV);
+    denR += (ratings[i]-meanR)**2;
+    denV += (votes[i]-meanV)**2;
+  }
+  const corr = num / Math.sqrt(denR * denV);
+
+  $('#ratingKpis').innerHTML = [
+    {label:'Mean Rating', value: avg(ratings).toFixed(3), color:'#f5c518'},
+    {label:'Std Dev', value: std(ratings).toFixed(3), color:'#3b82f6'},
+    {label:'Median Votes', value: fmt(Math.round(median(votes))), color:'#22c55e'},
+    {label:'Corr (Rating↔Votes)', value: corr.toFixed(3), color:'#a855f7'},
+  ].map(k => `
+    <div class="kpi" style="--kpi-color:${k.color}">
+      <div class="label">${k.label}</div>
+      <div class="value">${k.value}</div>
+    </div>`).join('');
+
+  // scatter votes vs rating
+  destroyChart('votesRating');
+  charts.votesRating = new Chart($('#chartVotesRating'), {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        data: MOVIES.map(m => ({ x: m.votes, y: m.rating })),
+        backgroundColor: 'rgba(59,130,246,0.5)',
+        pointRadius: 4, pointHoverRadius: 7,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const m = MOVIES.find(x => x.votes === ctx.raw.x && x.rating === ctx.raw.y);
+              return m ? `${m.title}: ★${m.rating} · ${fmt(m.votes)} votes` : '';
+            }
+          }
+        }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Vote Count', color: chartDefaults.color }, ticks: { color: chartDefaults.color, callback: v => (v/1e6).toFixed(1)+'M' }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { title: { display: true, text: 'Rating', color: chartDefaults.color }, ticks: { color: chartDefaults.color }, grid: { color: 'rgba(255,255,255,0.04)' }, min: 7.8 }
+      }
+    }
+  });
+
+  // runtime histogram
+  const rtBuckets = { '≤90':0, '91–120':0, '121–150':0, '151–180':0, '180+':0 };
+  runtimes.forEach(r => {
+    if (r <= 90) rtBuckets['≤90']++;
+    else if (r <= 120) rtBuckets['91–120']++;
+    else if (r <= 150) rtBuckets['121–150']++;
+    else if (r <= 180) rtBuckets['151–180']++;
+    else rtBuckets['180+']++;
+  });
+  destroyChart('runtimeDist');
+  charts.runtimeDist = new Chart($('#chartRuntimeDist'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(rtBuckets),
+      datasets: [{ data: Object.values(rtBuckets), backgroundColor: '#a855f7aa', borderRadius: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: chartDefaults.color }, grid: { display: false } },
+        y: { ticks: { color: chartDefaults.color }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
+      }
+    }
+  });
+
+  // top by votes
+  const byVotes = [...MOVIES].sort((a,b) => b.votes - a.votes).slice(0, 15);
+  $('#topVotesBody').innerHTML = byVotes.map((m,i) => `<tr style="cursor:pointer" onclick="showMovie('${m.imdb_id}')">
+    <td><span class="rank-badge">${i+1}</span></td>
+    <td><div class="movie-cell">
+      ${m.image_url ? `<img src="${m.image_url}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
+      <div class="t">${m.title}</div>
+    </div></td>
+    <td><span class="rating-pill">★ ${m.rating}</span></td>
+    <td>${fmt(m.votes)}</td>
+    <td>${m.duration_min} min</td>
+  </tr>`).join('');
+}
+
+// ========== COMPARE ==========
+let compareInited = false;
+function initCompare() {
+  if (compareInited) return;
+  compareInited = true;
+  const opts = MOVIES.map(m => `<option value="${m.imdb_id}">#${m.rank} — ${m.title} (★${m.rating})</option>`).join('');
+  $('#cmpA').innerHTML = opts;
+  $('#cmpB').innerHTML = opts;
+  $('#cmpB').selectedIndex = 1;
+}
+
+$('#cmpBtn').addEventListener('click', () => {
+  const a = MOVIES.find(m => m.imdb_id === $('#cmpA').value);
+  const b = MOVIES.find(m => m.imdb_id === $('#cmpB').value);
+  if (!a || !b) return;
+  $('#cmpResult').style.display = 'block';
+
+  const card = m => `
+    <div class="card" style="text-align:center">
+      ${m.image_url
+        ? `<img src="${m.image_url}" style="width:120px;height:180px;object-fit:cover;border-radius:10px;margin-bottom:12px" onerror="this.style.display='none'">`
+        : `<div style="font-size:3rem;margin-bottom:12px">🎬</div>`}
+      <h3 style="font-size:1.1rem;margin-bottom:4px">${m.title}</h3>
+      <div style="color:var(--text3);font-size:.8rem;margin-bottom:10px">Rank #${m.rank}</div>
+      <span class="rating-pill">★ ${m.rating}</span>
+      <div style="margin-top:12px">${m.genre.map(g=>`<span class="genre-tag">${g}</span>`).join('')}</div>
+    </div>`;
+  $('#cmpCards').innerHTML = card(a) + card(b);
+
+  $('#cmpThA').textContent = a.title;
+  $('#cmpThB').textContent = b.title;
+
+  const metrics = [
+    { key: 'rating', label: 'IMDb Rating', higher: true, fmt: v => '★ ' + v },
+    { key: 'votes', label: 'Vote Count', higher: true, fmt: v => fmt(v) },
+    { key: 'duration_min', label: 'Runtime', higher: false, fmt: v => v + ' min' },
+    { key: 'rank', label: 'Rank (lower better)', higher: false, fmt: v => '#' + v },
+  ];
+
+  $('#cmpBody').innerHTML = metrics.map(m => {
+    const va = a[m.key], vb = b[m.key];
+    let winner = '—';
+    if (va != null && vb != null) {
+      if (m.higher) winner = va > vb ? a.title : va < vb ? b.title : 'Tie';
+      else winner = va < vb ? a.title : va > vb ? b.title : 'Tie';
+    }
+    const winStyle = w => w === a.title ? 'color:var(--green);font-weight:600' : w === b.title ? 'color:var(--blue);font-weight:600' : '';
+    return `<tr>
+      <td>${m.label}</td>
+      <td>${m.fmt(va)}</td>
+      <td>${m.fmt(vb)}</td>
+      <td style="${winStyle(winner)}">${winner}</td>
+    </tr>`;
+  }).join('');
+
+  // radar (normalize)
+  const keys = ['rating','votes','duration_min'];
+  const labels = ['Rating','Popularity (votes)','Runtime'];
+  const maxes = keys.map(k => Math.max(...MOVIES.map(m => m[k])));
+  const mins = keys.map(k => Math.min(...MOVIES.map(m => m[k])));
+  const norm = (m) => keys.map((k,i) => {
+    if (maxes[i] === mins[i]) return 50;
+    return Math.round(((m[k]-mins[i])/(maxes[i]-mins[i]))*100);
+  });
+
+  destroyChart('compare');
+  charts.compare = new Chart($('#chartCompare'), {
+    type: 'radar',
+    data: {
+      labels,
+      datasets: [
+        { label: a.title, data: norm(a), borderColor: '#f5c518', backgroundColor: 'rgba(245,197,24,0.2)', pointBackgroundColor: '#f5c518' },
+        { label: b.title, data: norm(b), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.2)', pointBackgroundColor: '#3b82f6' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: chartDefaults.color } } },
+      scales: {
+        r: {
+          min: 0, max: 100,
+          ticks: { color: chartDefaults.color, backdropColor: 'transparent', font: { size: 10 } },
+          pointLabels: { color: chartDefaults.color, font: { size: 12 } },
+          grid: { color: 'rgba(255,255,255,0.08)' },
+          angleLines: { color: 'rgba(255,255,255,0.08)' }
+        }
+      }
+    }
+  });
+});
+
+// ========== MODAL ==========
+function showMovie(id) {
+  const m = MOVIES.find(x => x.imdb_id === id);
+  if (!m) return;
+  $('#modalBody').innerHTML = `
+    ${m.image_url
+      ? `<img class="modal-poster" src="${m.image_url}" alt="${m.title}" onerror="this.outerHTML='<div class=modal-poster-ph>🎬</div>'">`
+      : `<div class="modal-poster-ph">🎬</div>`}
+    <div class="modal-info">
+      <h2>${m.title}</h2>
+      <div class="mod-meta">
+        <span class="rating-pill">★ ${m.rating}</span>
+        <span style="color:var(--text3);font-size:.85rem">Rank #${m.rank}</span>
+        <span style="color:var(--text3);font-size:.85rem">${m.content_rating || '—'}</span>
+        <span style="color:var(--text3);font-size:.85rem">${m.duration_min} min</span>
+      </div>
+      <div style="margin-bottom:14px">${m.genre.map(g=>`<span class="genre-tag">${g}</span>`).join('')}</div>
+      <p class="plot">${m.description || 'No plot available.'}</p>
+      <div class="stats-row">
+        <div class="stat-box"><div class="sl">Votes</div><div class="sv">${fmt(m.votes)}</div></div>
+        <div class="stat-box"><div class="sl">IMDb ID</div><div class="sv" style="font-size:.85rem">${m.imdb_id}</div></div>
+      </div>
+      ${m.url ? `<a href="${m.url}" target="_blank" rel="noopener" class="btn" style="display:inline-block;margin-top:16px;text-decoration:none">View on IMDb →</a>` : ''}
+    </div>`;
+  $('#modal').classList.add('open');
+}
+$('#modalClose').addEventListener('click', () => $('#modal').classList.remove('open'));
+$('#modal').addEventListener('click', e => { if (e.target === $('#modal')) $('#modal').classList.remove('open'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#modal').classList.remove('open'); });
+
+// ========== INIT ==========
+initOverview();
+</script>
+</body>
+</html>
